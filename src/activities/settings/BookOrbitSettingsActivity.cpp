@@ -4,10 +4,15 @@
 #include <I18n.h>
 
 #include <cstring>
+#include <cstdint>
+#include <cstdio>
+#include <ctime>
 #include <string>
 #include <vector>
 
 #include "BookOrbitCredentialStore.h"
+#include "BookOrbitSyncStatusStore.h"
+#include "CrossPointSettings.h"
 #include "MappedInputManager.h"
 #include "activities/ActivityManager.h"
 #include "activities/browser/BookOrbitCatalogBrowserActivity.h"
@@ -22,7 +27,7 @@
 namespace fui = freeink::ui;
 
 namespace {
-constexpr int MENU_ITEMS = 8;
+constexpr int MENU_ITEMS = 9;
 // The folder row reuses the OPDS strings: "Download Folder" and "SD Root" are
 // generic and already translated in every language file.
 const StrId menuNames[MENU_ITEMS] = {StrId::STR_USERNAME,
@@ -32,7 +37,8 @@ const StrId menuNames[MENU_ITEMS] = {StrId::STR_USERNAME,
                                      StrId::STR_BOOKORBIT_CATALOG,
                                      StrId::STR_OPDS_DOWNLOAD_FOLDER,
                                      StrId::STR_SYNC_BEHAVIOR,
-                                     StrId::STR_BOOKORBIT_SYNC_ON_SLEEP};
+                                     StrId::STR_BOOKORBIT_SYNC_ON_SLEEP,
+                                     StrId::STR_BOOKORBIT_LAST_SUCCESSFUL_SYNC};
 constexpr fui::ActionId ACTION_ROW = 1;
 
 // Mirrors OpdsServerListActivity's normalizeDownloadFolder: "" for the SD root,
@@ -44,6 +50,26 @@ std::string normalizeDownloadFolder(std::string folder) {
   if (folder.front() != '/') folder.insert(folder.begin(), '/');
   while (folder.size() > 1 && folder.back() == '/') folder.pop_back();
   return folder;
+}
+
+std::string formatLastSuccessfulSync(const uint32_t epochSeconds) {
+  if (epochSeconds == 0) return tr(STR_NEVER);
+
+  const time_t local = static_cast<time_t>(epochSeconds) +
+                       static_cast<time_t>(static_cast<int>(SETTINGS.clockUtcOffsetQ) - 48) * 15 * 60;
+  struct tm localTm = {};
+  if (gmtime_r(&local, &localTm) == nullptr) return tr(STR_NEVER);
+
+  char value[24];
+  if (SETTINGS.clockFormat == 1) {
+    const int hour12 = localTm.tm_hour % 12 == 0 ? 12 : localTm.tm_hour % 12;
+    snprintf(value, sizeof(value), "%04d-%02d-%02d %d:%02d %s", localTm.tm_year + 1900, localTm.tm_mon + 1,
+             localTm.tm_mday, hour12, localTm.tm_min, localTm.tm_hour < 12 ? tr(STR_AM) : tr(STR_PM));
+  } else {
+    snprintf(value, sizeof(value), "%04d-%02d-%02d %02d:%02d", localTm.tm_year + 1900, localTm.tm_mon + 1,
+             localTm.tm_mday, localTm.tm_hour, localTm.tm_min);
+  }
+  return value;
 }
 }  // namespace
 
@@ -227,6 +253,8 @@ void BookOrbitSettingsActivity::buildListScreen(UiApp::ScreenType& screen) {
                                                                                     : tr(STR_ASK_EVERY_TIME);
     } else if (i == 7) {
       values[i] = BOOKORBIT_STORE.getSyncOnSleep() ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
+    } else if (i == 8) {
+      values[i] = formatLastSuccessfulSync(BOOKORBIT_SYNC_STATUS.getLastSuccessfulSyncEpoch());
     } else {
       // Authenticate and Browse Catalog both need credentials to do anything.
       values[i] = hasCredentials ? "" : std::string("[") + tr(STR_SET_CREDENTIALS_FIRST) + "]";

@@ -24,6 +24,7 @@
 #include "BookOrbitBookmarkStore.h"
 #include "BookOrbitCredentialStore.h"
 #include "BookOrbitStatsQueue.h"
+#include "BookOrbitSyncStatusStore.h"
 #include "BookmarkStore.h"
 #include "ClippingStore.h"
 #include "CrossPointSettings.h"
@@ -232,6 +233,19 @@ void syncTimeWithNTP() {
 #endif
 }
 
+// This is deliberately best-effort. It is called only after BookOrbit has
+// accepted or supplied the final progress, so a storage error must not turn a
+// completed network sync into a failure. Failed/cancelled sync paths never
+// reach it and retain the previous timestamp.
+void recordSuccessfulBookOrbitSync() {
+  uint32_t now = 0;
+  if (!WallClock::now(now)) {
+    LOG_ERR("BookOrbit", "Not recording sync time because the clock is not set");
+    return;
+  }
+  BOOKORBIT_SYNC_STATUS.recordSuccess(now);
+}
+
 void wifiOff() {
   // No SNTP stop here: syncSystemTimeFromNTP() releases the client before it returns.
   WiFi.disconnect(false);
@@ -276,6 +290,7 @@ void BookOrbitSyncActivity::markAutoReturn() { autoReturnAt = millis() + AUTO_RE
 
 void BookOrbitSyncActivity::completeAlreadySynced() {
   syncSession.reset();  // no request follows; free the TLS session before the reader reloads
+  recordSuccessfulBookOrbitSync();
   {
     RenderLock lock(*this);
     state = SYNC_COMPLETE;
@@ -314,6 +329,7 @@ void BookOrbitSyncActivity::saveProgressAndReturn(const CrossPointPosition& posi
   // Manual applies record the marker too, so the history smart sync reads is
   // already there the day the option gets switched on.
   writeLastSyncMarker(BookContentId::bookStateDir(epubPath), remoteProgress.timestamp);
+  recordSuccessfulBookOrbitSync();
   returnToReader();
 }
 
@@ -1558,6 +1574,7 @@ void BookOrbitSyncActivity::performUpload() {
   }
 
   writeLastSyncMarker(BookContentId::bookStateDir(epubPath), progress.timestamp);
+  recordSuccessfulBookOrbitSync();
   {
     RenderLock lock(*this);
     state = UPLOAD_COMPLETE;

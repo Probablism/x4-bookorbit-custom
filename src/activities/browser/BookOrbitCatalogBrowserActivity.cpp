@@ -296,6 +296,15 @@ bool BookOrbitCatalogBrowserActivity::loadRoot(const bool allowNetwork) {
                      std::to_string(collectLocalBooks("in-progress", nullptr)) + ")";
   inProgress.sectionId = "in-progress";
   entries.push_back(std::move(inProgress));
+  // Completed is deliberately local: unlike a server-side read status it remains
+  // useful offline, and it uses the same persisted completion bit as the reader's
+  // "Mark finished" action.  Keep it adjacent to the other on-device shelves.
+  Entry finished;
+  finished.type = EntryType::LOCAL_SECTION;
+  finished.title = std::string(tr(STR_STATS_COMPLETED_LBL)) + " (" +
+                   std::to_string(collectLocalBooks("finished", nullptr)) + ")";
+  finished.sectionId = "finished";
+  entries.push_back(std::move(finished));
   Entry search;
   search.type = EntryType::SEARCH;
   search.title = tr(STR_SEARCH);
@@ -313,12 +322,15 @@ bool BookOrbitCatalogBrowserActivity::loadRoot(const bool allowNetwork) {
 // badge the categories without building (and then discarding) their rows.
 size_t BookOrbitCatalogBrowserActivity::collectLocalBooks(const std::string& kind, std::vector<Entry>* sink) {
   size_t count = 0;
-  if (kind == "in-progress") {
-    // Books with local reading progress: the recent-books list minus finished ones.
+  if (kind == "in-progress" || kind == "finished") {
+    // The local reading shelves are backed by the reader's persisted completion
+    // bit, rather than BookOrbit's server-side state. They therefore work while
+    // offline and remain consistent with the reader's Mark finished action.
+    const bool wantFinished = kind == "finished";
     for (const auto& book : RECENT_BOOKS.getBooks()) {
       if (!FsHelpers::hasEpubExtension(book.path) || !Storage.exists(book.path.c_str())) continue;
       const BookReadingStats stats = BookReadingStats::load(Epub::cachePathForFilePath(book.path, "/.crosspoint"));
-      if (stats.isCompleted) continue;
+      if (stats.isCompleted != wantFinished) continue;
       count++;
       if (!sink) continue;
       Entry entry;
@@ -398,7 +410,13 @@ size_t BookOrbitCatalogBrowserActivity::collectLocalBooks(const std::string& kin
 
 void BookOrbitCatalogBrowserActivity::loadLocalBooks(const std::string& kind) {
   entries.clear();
-  listTitle = (kind == "in-progress") ? tr(STR_BOOKORBIT_IN_PROGRESS) : tr(STR_BOOKORBIT_ON_DEVICE);
+  if (kind == "in-progress") {
+    listTitle = tr(STR_BOOKORBIT_IN_PROGRESS);
+  } else if (kind == "finished") {
+    listTitle = tr(STR_STATS_COMPLETED_LBL);
+  } else {
+    listTitle = tr(STR_BOOKORBIT_ON_DEVICE);
+  }
 
   collectLocalBooks(kind, &entries);
   std::sort(entries.begin(), entries.end(), [](const Entry& a, const Entry& b) {

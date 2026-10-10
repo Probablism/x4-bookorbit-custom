@@ -13,6 +13,7 @@ Based on CrossInk v1.6.1.
 
 - The Cover Grid home screen, new in CrossInk v1.6.1 on devices with PSRAM, has a BookOrbit tab once an account is set up, next to Library and OPDS.
 - The date can be shown on devices without a clock chip, like the clock already could. CrossInk v1.6.1 lets you place a clock and a date in the status bars; both are offered on every device, and the date appears once the device has set its time over Wi-Fi.
+- BookOrbit settings now show the last successful sync time. It is kept across restarts and is only updated after a completed progress sync, so a failed or cancelled attempt leaves the previous successful time intact.
 
 ### Changed
 
