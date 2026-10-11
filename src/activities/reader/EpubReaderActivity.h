@@ -23,6 +23,7 @@
 #include "FootnoteLinkTargets.h"
 #include "GlobalReadingStats.h"
 #include "ManualPageTurnQueue.h"
+#include "activities/reader/MarginStrokeStore.h"
 #include "ReaderProgressSaveDebouncer.h"
 #include "SideButtonShortcuts.h"
 #include "activities/Activity.h"
@@ -213,6 +214,16 @@ class EpubReaderActivity final : public Activity {
 #if CROSSINK_APP_CAP_TOUCH
   std::unique_ptr<TouchReaderPreviewModel> touchReaderPreviewModel;
   bool touchReaderPreviewAllocationAttempted = false;
+  // Fixed page cache: 24 strokes x 64 points is 6 KiB. It is part of the
+  // X4 Pro reader activity, never allocated or changed from the render task.
+  std::array<MarginStroke, MARGIN_STROKE_MAX_PER_PAGE> marginStrokes{};
+  uint8_t marginStrokeCount = 0;
+  MarginStrokeKey loadedMarginStrokeKey{};
+  bool marginStrokePageLoaded = false;
+  MarginStroke pendingMarginStroke{};
+  bool marginStrokeRecording = false;
+  bool marginStrokeMoved = false;
+  unsigned long marginStrokeDownAt = 0;
 #endif
   uint16_t pendingClippingIndex = UINT16_MAX;
   bool pendingScreenshot = false;
@@ -479,6 +490,10 @@ class EpubReaderActivity final : public Activity {
   void executeFootnoteQuickAction(bool suppressInitialPowerRelease = false);
   void openFootnoteSelect(bool returnToReaderMenu);
 #if CROSSINK_APP_CAP_TOUCH
+  bool handleMarginStrokeTouch();
+  void refreshMarginStrokesForCurrentPage();
+  void drawMarginStrokes() const;
+  MarginStrokeKey currentMarginStrokeKey() const;
   bool handlePinchFontResize();
   void resetPinchFontGesture();
   void buildFootnoteTouchTargets(const Page& page, int fontId, int orientedMarginTop, int orientedMarginLeft);

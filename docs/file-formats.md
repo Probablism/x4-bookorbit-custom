@@ -5,6 +5,29 @@ All POD fields are written in the ESP32 little-endian representation used by
 `Serialization.h`; strings are length-prefixed UTF-8 unless a format notes a
 fixed-size char buffer.
 
+## `/.crosspoint/book_<content-hash>/notebook_strokes.bin`
+
+### Version 1
+
+The X4 Pro reader stores local-only freehand margin marks in this content-keyed
+sidecar, so a renamed or moved EPUB keeps its marks. The file starts with the
+four-byte magic `CIMS`, an 8-bit version, reserved byte, 16-bit record count
+(maximum 128), and a 32-bit next stroke ID. Each fixed-size record has a
+32-bit ID, 16-bit spine and rendered-page indices, a 32-bit layout signature,
+an 8-bit point count (2–64), then 64 normalized `u16 x, u16 y` points. Only
+the first point-count points are meaningful; the remainder are zero padding.
+
+Coordinates are normalized to the logical screen (0–1000) and captured only
+from the reader's outer gutters. A page load filters by spine, rendered page,
+and layout signature, so a font, margin, orientation, or other reflow never
+draws old ink on a different page. Those incompatible marks are retained until
+the user clears them. At most 24 current-layout marks are permitted per page.
+
+Writes are atomic: `notebook_strokes.tmp` is synced, the previous file is
+renamed to `.bak`, then the temporary file is promoted. A lone `.bak` is
+recovered before use. The marks do not participate in BookOrbit annotation
+sync, whose text/xpointer model cannot represent freehand ink.
+
 ## `epub_<hash>/links.bin`
 
 The EPUB reader writes followed-link Back history on clean exit (Home, sleep,

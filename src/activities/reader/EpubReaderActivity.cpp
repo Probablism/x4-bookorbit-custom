@@ -3036,6 +3036,11 @@ void EpubReaderActivity::loop() {
   }
 
 #if CROSSINK_APP_CAP_TOUCH
+  refreshMarginStrokesForCurrentPage();
+  if (handleMarginStrokeTouch()) {
+    backgroundBuildYieldForInput.store(true, std::memory_order_relaxed);
+    return;
+  }
   if (handlePinchFontResize()) {
     // A live two-finger gesture is reader input, so background indexing yields
     // just as it does for a page turn or normal tap.
@@ -3831,6 +3836,133 @@ void EpubReaderActivity::handleClippingJump(const ClippingJumpResult& clipping) 
 }
 
 #if CROSSINK_APP_CAP_TOUCH
+MarginStrokeKey EpubReaderActivity::currentMarginStrokeKey() const {
+  MarginStrokeKey key{};
+  key.spineIndex = static_cast<uint16_t>(std::max(0, currentSpineIndex));
+  key.pageIndex = section ? static_cast<uint16_t>(std::max(0, section->currentPage)) : 0;
+  key.layoutSignature = activeSectionLayoutSignature;
+  return key;
+}
+
+void EpubReaderActivity::refreshMarginStrokesForCurrentPage() {
+  if (!section || !epub || section->currentPage < 0 || section->currentPage > UINT16_MAX) return;
+  const MarginStrokeKey key = currentMarginStrokeKey();
+  if (marginStrokePageLoaded && std::memcmp(&key, &loadedMarginStrokeKey, sizeof(key)) == 0) return;
+
+  // SD reads stay on the main task, never in render(). The fixed page cache is
+  // protected from the render task while it is replaced.
+  RenderLock lock(*this);
+  const std::string stateDir = BookContentId::bookStateDir(epub->getPath());
+  marginStrokeCount = 0;
+  if (!stateDir.empty() && !MarginStrokeStore::loadPage(stateDir, key, marginStrokes, marginStrokeCount)) {
+    LOG_ERR("MInk", "Failed to load margin ink for page");
+  }
+  loadedMarginStrokeKey = key;
+  marginStrokePageLoaded = true;
+  requestUpdate();
+}
+
+void EpubReaderActivity::drawMarginStrokes() const {
+  if (renderer.getRenderMode() != GfxRenderer::BW) return;
+  const int width = renderer.getScreenWidth();
+  const int height = renderer.getScreenHeight();
+  if (width <= 1 || height <= 1) return;
+  for (uint8_t s = 0; s < marginStrokeCount; ++s) {
+    const MarginStroke& stroke = marginStrokes[s];
+    if (stroke.pointCount < 2) continue;
+    for (uint8_t p = 1; p < stroke.pointCount; ++p) {
+      const MarginStrokePoint& from = stroke.points[p - 1];
+      const MarginStrokePoint& to = stroke.points[p];
+      renderer.drawLine((from.x * (width - 1)) / 1000, (from.y * (height - 1)) / 1000,
+                        (to.x * (width - 1)) / 1000, (to.y * (height - 1)) / 1000, true);
+    }
+  }
+}
+
+bool EpubReaderActivity::handleMarginStrokeTouch() {
+  if (!SETTINGS.touchReaderControls || !mappedInput.hasTouch() || !section || !epub || RenderLock::peek()) return false;
+  constexpr int GUTTER_MIN_PX = 56;
+  constexpr int GUTTER_DIVISOR = 7;
+  constexpr int POINT_DISTANCE_PX = 5;
+  constexpr unsigned long CLEAR_HOLD_MS = 900;
+  const int width = renderer.getScreenWidth();
+  const int height = renderer.getScreenHeight();
+  const int gutter = std::max(GUTTER_MIN_PX, width / GUTTER_DIVISOR);
+  int x = 0;
+  int y = 0;
+
+  if (!marginStrokeRecording && mappedInput.wasScreenTouchDown(x, y)) {
+    if (x >= gutter && x < width - gutter) return false;
+    pendingMarginStroke = MarginStroke{};
+    pendingMarginStroke.key = currentMarginStrokeKey();
+    pendingMarginStroke.id = static_cast<uint32_t>(millis()) | 1U;
+    pendingMarginStroke.pointCount = 1;
+    pendingMarginStroke.points[0] = {static_cast<uint16_t>((std::max(0, x) * 1000) / std::max(1, width - 1)),
+                                     static_cast<uint16_t>((std::max(0, y) * 1000) / std::max(1, height - 1))};
+    marginStrokeRecording = true;
+    marginStrokeMoved = false;
+    marginStrokeDownAt = millis();
+    return true;
+  }
+  if (!marginStrokeRecording) return false;
+
+  if (mappedInput.isScreenTouchHeld(x, y)) {
+    unsigned long heldMs = 0;
+    int startX = 0;
+    int startY = 0;
+    if (!marginStrokeMoved && mappedInput.isScreenTouchTapCandidate(startX, startY, heldMs) && heldMs >= CLEAR_HOLD_MS) {
+      marginStrokeRecording = false;
+      mappedInput.suppressCurrentTouchContact();
+      startActivityForResult(
+          std::make_unique<ConfirmationActivity>(renderer, mappedInput, tr(STR_CONFIRM), tr(STR_CLEAR_MARGIN_MARKS)),
+          [this](const ActivityResult& result) {
+            if (!result.isCancelled && epub && MarginStrokeStore::clearPage(BookContentId::bookStateDir(epub->getPath()),
+                                                                              currentMarginStrokeKey())) {
+              marginStrokePageLoaded = false;
+              refreshMarginStrokesForCurrentPage();
+            }
+            requestUpdate();
+          });
+      return true;
+    }
+    const MarginStrokePoint last = pendingMarginStroke.points[pendingMarginStroke.pointCount - 1];
+    const int lastX = (last.x * (width - 1)) / 1000;
+    const int lastY = (last.y * (height - 1)) / 1000;
+    if (std::abs(x - lastX) >= POINT_DISTANCE_PX || std::abs(y - lastY) >= POINT_DISTANCE_PX) {
+      marginStrokeMoved = true;
+      mappedInput.suppressNextTouchTap();
+      if (pendingMarginStroke.pointCount < MARGIN_STROKE_MAX_POINTS) {
+        pendingMarginStroke.points[pendingMarginStroke.pointCount++] = {
+            static_cast<uint16_t>((std::max(0, x) * 1000) / std::max(1, width - 1)),
+            static_cast<uint16_t>((std::max(0, y) * 1000) / std::max(1, height - 1))};
+      }
+    }
+    return true;
+  }
+  if (!mappedInput.wasScreenTouchReleased()) return true;
+
+  marginStrokeRecording = false;
+  if (pendingMarginStroke.pointCount < 2) return true;
+  // A short outward horizontal flick removes the most recent mark. This never
+  // paints white: the next composition redraws the EPUB base before the marks.
+  const MarginStrokePoint first = pendingMarginStroke.points[0];
+  const MarginStrokePoint last = pendingMarginStroke.points[pendingMarginStroke.pointCount - 1];
+  const bool horizontal = std::abs(static_cast<int>(last.x) - first.x) > 70 &&
+                          std::abs(static_cast<int>(last.y) - first.y) < 35;
+  const bool outward = first.x < 500 ? last.x < first.x : last.x > first.x;
+  const std::string stateDir = BookContentId::bookStateDir(epub->getPath());
+  bool changed = false;
+  {
+    RenderLock lock(*this);
+    changed = horizontal && outward ? MarginStrokeStore::eraseLatest(stateDir, pendingMarginStroke.key)
+                                    : MarginStrokeStore::append(stateDir, pendingMarginStroke);
+  }
+  if (!changed) LOG_ERR("MInk", "Failed to save margin mark");
+  marginStrokePageLoaded = false;
+  refreshMarginStrokesForCurrentPage();
+  return true;
+}
+
 bool EpubReaderActivity::handlePinchFontResize() {
   if (!SETTINGS.pinchFontResizeEnabled || !SETTINGS.touchReaderControls || !mappedInput.supportsMultiTouch()) {
     resetPinchFontGesture();
@@ -7933,6 +8065,7 @@ bool EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int fo
 
   const auto finalizeBufferComposition = [&]() {
     drawClippingHighlights(*page, fontId, orientedMarginTop, orientedMarginLeft);
+    drawMarginStrokes();
     drawPublisherPageMarkers(renderer, *page, orientedMarginTop, contentBottom, foregroundBlack);
 #if CROSSINK_APP_CAP_TOUCH
     if (activeFootnotePreview) {
