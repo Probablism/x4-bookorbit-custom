@@ -187,7 +187,7 @@ namespace {
 // records that include an EPUB.
 std::string booksUrl(const BookOrbitBookQuery& query, const int page, const int size) {
   std::string url = BOOKORBIT_STORE.getBaseUrl() + "/plugin/catalog/books?page=" + std::to_string(page) +
-                    "&size=" + std::to_string(size) + "&format=epub";
+                    "&size=" + std::to_string(size) + "&format=x4-epub";
   if (!query.sort.empty()) {
     url += "&sort=" + urlEncode(query.sort);
   }
