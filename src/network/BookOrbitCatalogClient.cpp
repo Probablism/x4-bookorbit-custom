@@ -331,6 +331,9 @@ bool BookOrbitCatalogClient::fetchSectionEntries(const std::string& sectionId, c
   filter["items"][0]["title"] = true;
   filter["items"][0]["count"] = true;
   filter["items"][0]["seriesId"] = true;
+  filter["items"][0]["previewBooks"][0]["id"] = true;
+  filter["items"][0]["previewBooks"][0]["hasCover"] = true;
+  filter["items"][0]["previewBooks"][0]["updatedAt"] = true;
   JsonDocument doc;
   if (!fetchJson(url, filter, doc)) return false;
 
@@ -350,6 +353,13 @@ bool BookOrbitCatalogClient::fetchSectionEntries(const std::string& sectionId, c
       } else {
         entry.seriesId = std::to_string(item["seriesId"] | 0LL);
       }
+    }
+    for (JsonObjectConst preview : item["previewBooks"].as<JsonArrayConst>()) {
+      BookOrbitCatalogBook book;
+      book.id = preview["id"] | 0;
+      book.hasCover = preview["hasCover"] | false;
+      book.coverUpdatedAt = std::string(preview["updatedAt"] | "");
+      if (book.id > 0 && book.hasCover) entry.previewBooks.push_back(std::move(book));
     }
     outPage.entries.push_back(std::move(entry));
   }

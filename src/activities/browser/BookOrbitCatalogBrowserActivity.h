@@ -37,6 +37,7 @@ class BookOrbitCatalogBrowserActivity final : public Activity {
     std::string path;       // SD path: LOCAL_BOOK entries, and BOOK entries already on the device
     std::string coverPath;  // display-ready BookOrbit thumbnail, X4 Pro catalogs only
     std::string coverUpdatedAt;
+    std::vector<BookOrbitCatalogBook> previewBooks;  // genre-card cover mosaic
     bool coverFetchAttempted = false;  // avoid retrying a missing/broken server cover every UI loop
     int64_t bookId = 0;
     bool onDevice = false;  // BOOK entries: a matching file already exists on the device (at `path`)
@@ -106,6 +107,7 @@ class BookOrbitCatalogBrowserActivity final : public Activity {
   // discovery landing page whose tiles open the same durable sections.
   void buildDiscoverHome(UiApp::ScreenType& screen);
   void buildCoverGrid(UiApp::ScreenType& screen);
+  void buildGenreGrid(UiApp::ScreenType& screen);
   bool cacheOneVisibleCover();
   void activateSelected();
   void openLocalBook(const std::string& path);

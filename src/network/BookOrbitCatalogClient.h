@@ -43,6 +43,7 @@ struct BookOrbitFacetEntry {
   std::string title;     // display name
   std::string seriesId;  // numeric series id when the server provides one (series only)
   int count = 0;         // number of books, 0 when the server omits it
+  std::vector<BookOrbitCatalogBook> previewBooks;  // optional genre-card covers
 };
 
 /** Result of a paged facet listing request (authors or series). */

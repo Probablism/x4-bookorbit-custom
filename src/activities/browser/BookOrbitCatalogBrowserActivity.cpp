@@ -65,6 +65,11 @@ constexpr int CATALOG_GRID_ROWS = 2;
 constexpr int CATALOG_GRID_PAGE_SIZE = CATALOG_GRID_COLUMNS * CATALOG_GRID_ROWS;
 constexpr int CATALOG_GRID_GAP = 10;
 constexpr int CATALOG_GRID_LABEL_HEIGHT = 32;
+constexpr int CATALOG_GENRE_COLUMNS = 2;
+constexpr int CATALOG_GENRE_ROWS = 2;
+constexpr int CATALOG_GENRE_PAGE_SIZE = CATALOG_GENRE_COLUMNS * CATALOG_GENRE_ROWS;
+constexpr int CATALOG_GENRE_GAP = 10;
+constexpr int CATALOG_GENRE_LABEL_HEIGHT = 34;
 constexpr int CATALOG_HOME_COLUMNS = 4;
 constexpr int CATALOG_HOME_ROWS = 2;
 constexpr int CATALOG_HOME_PAGE_SIZE = CATALOG_HOME_COLUMNS * CATALOG_HOME_ROWS;
@@ -526,6 +531,7 @@ bool BookOrbitCatalogBrowserActivity::loadFacetEntries(const std::string& sectio
     }
     entry.sectionId = facet.id;
     entry.seriesId = facet.seriesId;
+    entry.previewBooks = std::move(facet.previewBooks);
     entries.push_back(std::move(entry));
   }
   if (!append) {
@@ -601,7 +607,21 @@ bool BookOrbitCatalogBrowserActivity::loadBooks(const BookOrbitBookQuery& query,
 }
 
 bool BookOrbitCatalogBrowserActivity::cacheOneVisibleCover() {
-  if (navLevel != NavLevel::Books || entries.empty()) return false;
+  if (entries.empty()) return false;
+  if (navLevel == NavLevel::FacetList && facetSectionId == "genres") {
+    const int first = std::max(0, (topIndex / CATALOG_GENRE_PAGE_SIZE) * CATALOG_GENRE_PAGE_SIZE);
+    const int last = std::min(static_cast<int>(entries.size()), first + CATALOG_GENRE_PAGE_SIZE);
+    for (int i = first; i < last; ++i) {
+      for (const auto& preview : entries[static_cast<size_t>(i)].previewBooks) {
+        if (!BookOrbitCoverCache::isAvailable(preview.id, preview.coverUpdatedAt)) {
+          if (BookOrbitCoverCache::ensure(preview.id, preview.coverUpdatedAt)) requestUpdate();
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+  if (navLevel != NavLevel::Books) return false;
   const int first = std::max(0, (topIndex / CATALOG_GRID_PAGE_SIZE) * CATALOG_GRID_PAGE_SIZE);
   const int last = std::min(static_cast<int>(entries.size()), first + CATALOG_GRID_PAGE_SIZE);
   for (int i = first; i < last; ++i) {
@@ -1251,6 +1271,12 @@ void BookOrbitCatalogBrowserActivity::buildListScreen(UiApp::ScreenType& screen)
     buildCoverGrid(screen);
     return;
   }
+  if (navLevel == NavLevel::FacetList && facetSectionId == "genres") {
+    screen.setContentMargin(fui::Insets{static_cast<int16_t>(CompactHeader::contentTop(metrics)), 0,
+                                        static_cast<int16_t>(metrics.buttonHintsHeight), 0});
+    buildGenreGrid(screen);
+    return;
+  }
   // Content below the compact header band, above the button hints. The header
   // is painted by render(), so the app must not claim its rows.
   screen.setContentMargin(fui::Insets{static_cast<int16_t>(CompactHeader::contentTop(metrics)), 0,
@@ -1372,6 +1398,47 @@ void BookOrbitCatalogBrowserActivity::buildCoverGrid(UiApp::ScreenType& screen) 
     const int labelX = x + (coverWidth - renderer.getTextWidth(UI_10_FONT_ID, label.c_str())) / 2;
     renderer.drawText(UI_10_FONT_ID, labelX, y + coverHeight + 3, label.c_str());
     screen.frame().hit(fui::Rect{static_cast<int16_t>(x), static_cast<int16_t>(y), static_cast<int16_t>(coverWidth),
+                                 static_cast<int16_t>(cellHeight)},
+                       ACTION_ROW, static_cast<int16_t>(index), fui::InputTouch | fui::InputLongPress);
+  }
+}
+
+void BookOrbitCatalogBrowserActivity::buildGenreGrid(UiApp::ScreenType& screen) {
+  const fui::Rect area = screen.body();
+  const int cellWidth = std::max(1, (area.width - (CATALOG_GENRE_COLUMNS - 1) * CATALOG_GENRE_GAP) / CATALOG_GENRE_COLUMNS);
+  const int cellHeight = std::max(1, (area.height - (CATALOG_GENRE_ROWS - 1) * CATALOG_GENRE_GAP) / CATALOG_GENRE_ROWS);
+  const int mosaicHeight = std::max(1, cellHeight - CATALOG_GENRE_LABEL_HEIGHT - 8);
+  const int thumbWidth = std::max(1, (cellWidth - 10) / 2);
+  const int thumbHeight = std::max(1, (mosaicHeight - 8) / 2);
+  visibleRows = CATALOG_GENRE_PAGE_SIZE;
+  topIndex = std::max(0, (topIndex / CATALOG_GENRE_PAGE_SIZE) * CATALOG_GENRE_PAGE_SIZE);
+  const int visible = std::min(CATALOG_GENRE_PAGE_SIZE, static_cast<int>(entries.size()) - topIndex);
+  for (int slot = 0; slot < visible; ++slot) {
+    const int index = topIndex + slot;
+    const auto& entry = entries[static_cast<size_t>(index)];
+    const int x = area.x + (slot % CATALOG_GENRE_COLUMNS) * (cellWidth + CATALOG_GENRE_GAP);
+    const int y = area.y + (slot / CATALOG_GENRE_COLUMNS) * (cellHeight + CATALOG_GENRE_GAP);
+    renderer.fillRect(x, y, cellWidth, cellHeight, Color::White);
+    for (size_t coverIndex = 0; coverIndex < 4; ++coverIndex) {
+      const int cx = x + 3 + static_cast<int>(coverIndex % 2) * (thumbWidth + 4);
+      const int cy = y + 3 + static_cast<int>(coverIndex / 2) * (thumbHeight + 4);
+      bool drawn = false;
+      if (coverIndex < entry.previewBooks.size()) {
+        const auto& preview = entry.previewBooks[coverIndex];
+        const std::string path = BookOrbitCoverCache::pathFor(preview.id, preview.coverUpdatedAt);
+        FsFile cover;
+        if (Storage.openFileForRead("BookOrbit", path, cover)) {
+          Bitmap bitmap(cover);
+          if (bitmap.parseHeaders() == BmpReaderError::Ok) drawn = renderer.drawBitmap(bitmap, cx, cy, thumbWidth, thumbHeight);
+          cover.close();
+        }
+      }
+      if (!drawn) renderer.drawRect(cx, cy, thumbWidth, thumbHeight, true);
+    }
+    const std::string label = renderer.truncatedText(UI_10_FONT_ID, entry.title.c_str(), cellWidth - 10);
+    renderer.drawText(UI_10_FONT_ID, x + 5, y + mosaicHeight + 8, label.c_str());
+    if (index == selectorIndex) renderer.drawRect(x - 2, y - 2, cellWidth + 4, cellHeight + 4, true);
+    screen.frame().hit(fui::Rect{static_cast<int16_t>(x), static_cast<int16_t>(y), static_cast<int16_t>(cellWidth),
                                  static_cast<int16_t>(cellHeight)},
                        ACTION_ROW, static_cast<int16_t>(index), fui::InputTouch | fui::InputLongPress);
   }
