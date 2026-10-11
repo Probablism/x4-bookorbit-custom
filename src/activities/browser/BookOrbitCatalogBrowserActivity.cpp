@@ -70,7 +70,7 @@ constexpr int CATALOG_GENRE_ROWS = 2;
 constexpr int CATALOG_GENRE_PAGE_SIZE = CATALOG_GENRE_COLUMNS * CATALOG_GENRE_ROWS;
 constexpr int CATALOG_GENRE_GAP = 10;
 constexpr int CATALOG_GENRE_LABEL_HEIGHT = 34;
-constexpr int CATALOG_HOME_COLUMNS = 4;
+constexpr int CATALOG_HOME_COLUMNS = 3;
 constexpr int CATALOG_HOME_ROWS = 2;
 constexpr int CATALOG_HOME_PAGE_SIZE = CATALOG_HOME_COLUMNS * CATALOG_HOME_ROWS;
 constexpr int CATALOG_HOME_GAP = 12;
@@ -297,26 +297,6 @@ bool BookOrbitCatalogBrowserActivity::loadRoot(const bool allowNetwork) {
     BookOrbitCatalogListCache::saveRootSections(sections);
   }
 
-  // Per-section entry counts, the way BookOrbit's own plugin badges its Browse
-  // tiles: the dashboard plus the totals of the two EPUB book listings, cached
-  // with the listings. Non-fatal — an older server without the dashboard just
-  // shows the sections without counts.
-  BookOrbitCatalogCounts counts;
-  if (!BookOrbitCatalogListCache::loadCatalogCounts(counts) && allowNetwork &&
-      BookOrbitCatalogClient::fetchCatalogCounts(counts)) {
-    BookOrbitCatalogListCache::saveCatalogCounts(counts);
-  }
-  const auto sectionCount = [&counts](const std::string& id) {
-    if (id == "all-books" || id == "recent") return counts.totalBooks;
-    if (id == "continue-reading") return counts.inProgress;
-    if (id == "libraries") return counts.libraries;
-    if (id == "authors") return counts.authors;
-    if (id == "series") return counts.series;
-    if (id == "collections") return counts.collections;
-    if (id == "smart-scopes") return counts.smartScopes;
-    return -1;
-  };
-
   entries.clear();
   listFreedForDownload = false;
   for (auto& section : sections) {
@@ -325,10 +305,6 @@ bool BookOrbitCatalogBrowserActivity::loadRoot(const bool allowNetwork) {
                          section.id == "libraries" || section.id == "smart-scopes";
     entry.type = isFacet ? EntryType::FACET_SECTION : EntryType::SECTION;
     entry.title = section.title;
-    const int count = sectionCount(section.id);
-    if (count >= 0) {
-      entry.title += " (" + std::to_string(count) + ")";
-    }
     entry.sectionId = section.id;
     entries.push_back(std::move(entry));
   }
@@ -339,21 +315,6 @@ bool BookOrbitCatalogBrowserActivity::loadRoot(const bool allowNetwork) {
       std::string(tr(STR_BOOKORBIT_ON_DEVICE)) + " (" + std::to_string(collectLocalBooks("on-device", nullptr)) + ")";
   onDevice.sectionId = "on-device";
   entries.push_back(std::move(onDevice));
-  Entry inProgress;
-  inProgress.type = EntryType::LOCAL_SECTION;
-  inProgress.title = std::string(tr(STR_BOOKORBIT_IN_PROGRESS)) + " (" +
-                     std::to_string(collectLocalBooks("in-progress", nullptr)) + ")";
-  inProgress.sectionId = "in-progress";
-  entries.push_back(std::move(inProgress));
-  // Completed is deliberately local: unlike a server-side read status it remains
-  // useful offline, and it uses the same persisted completion bit as the reader's
-  // "Mark finished" action.  Keep it adjacent to the other on-device shelves.
-  Entry finished;
-  finished.type = EntryType::LOCAL_SECTION;
-  finished.title = std::string(tr(STR_STATS_COMPLETED_LBL)) + " (" +
-                   std::to_string(collectLocalBooks("finished", nullptr)) + ")";
-  finished.sectionId = "finished";
-  entries.push_back(std::move(finished));
   Entry search;
   search.type = EntryType::SEARCH;
   search.title = tr(STR_SEARCH);
