@@ -60,6 +60,7 @@ struct BookOrbitBookQuery {
   std::string author;        // author filter (facet entry id)
   std::string seriesId;      // numeric series filter (preferred when present)
   std::string series;        // series-name filter (fallback when no seriesId)
+  std::string genre;         // exact genre filter (facet entry id)
   std::string collectionId;  // numeric collection filter (facet entry id)
   std::string smartScopeId;  // numeric SmartScope filter (facet entry id)
   std::string libraryId;     // numeric library filter; combinable with every field above

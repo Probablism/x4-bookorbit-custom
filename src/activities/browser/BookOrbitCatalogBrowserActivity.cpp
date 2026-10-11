@@ -316,7 +316,7 @@ bool BookOrbitCatalogBrowserActivity::loadRoot(const bool allowNetwork) {
   listFreedForDownload = false;
   for (auto& section : sections) {
     Entry entry;
-    const bool isFacet = section.id == "authors" || section.id == "series" || section.id == "collections" ||
+    const bool isFacet = section.id == "authors" || section.id == "series" || section.id == "genres" || section.id == "collections" ||
                          section.id == "libraries" || section.id == "smart-scopes";
     entry.type = isFacet ? EntryType::FACET_SECTION : EntryType::SECTION;
     entry.title = section.title;
@@ -916,6 +916,9 @@ void BookOrbitCatalogBrowserActivity::activateSelected() {
         } else {
           query.series = entry.sectionId;
         }
+      } else if (facetSectionId == "genres") {
+        query.sort = "title";
+        query.genre = entry.sectionId;
       } else if (facetSectionId == "collections") {
         query.sort = "title";
         query.collectionId = entry.sectionId;

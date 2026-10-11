@@ -147,7 +147,7 @@ bool fetchJson(const std::string& url, const JsonDocument& filter, JsonDocument&
 // Sections we can browse: direct book listings plus the
 // authors/series/collections/libraries/smart-scopes drill-down facets.
 constexpr const char* SUPPORTED_SECTIONS[] = {
-    "recent", "continue-reading", "all-books", "authors", "series", "collections", "libraries", "smart-scopes",
+    "recent", "continue-reading", "all-books", "authors", "series", "genres", "collections", "libraries", "smart-scopes",
 };
 
 bool isSupportedSection(const std::string& sectionId) {
@@ -205,6 +205,9 @@ std::string booksUrl(const BookOrbitBookQuery& query, const int page, const int 
     url += "&seriesId=" + urlEncode(query.seriesId);
   } else if (!query.series.empty()) {
     url += "&series=" + urlEncode(query.series);
+  }
+  if (!query.genre.empty()) {
+    url += "&genre=" + urlEncode(query.genre);
   }
   if (!query.collectionId.empty()) {
     url += "&collectionId=" + urlEncode(query.collectionId);
