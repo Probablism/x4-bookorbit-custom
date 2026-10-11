@@ -286,6 +286,8 @@ bool BookOrbitCatalogClient::fetchBooks(const BookOrbitBookQuery& query, const i
   filter["items"][0]["id"] = true;
   filter["items"][0]["title"] = true;
   filter["items"][0]["authors"] = true;
+  filter["items"][0]["hasCover"] = true;
+  filter["items"][0]["updatedAt"] = true;
   JsonDocument doc;
   if (!fetchJson(url, filter, doc)) return false;
 
@@ -298,6 +300,8 @@ bool BookOrbitCatalogClient::fetchBooks(const BookOrbitBookQuery& query, const i
     BookOrbitCatalogBook book;
     book.id = item["id"] | 0;
     book.title = std::string(item["title"] | "");
+    book.hasCover = item["hasCover"] | false;
+    book.coverUpdatedAt = std::string(item["updatedAt"] | "");
     JsonArrayConst authors = item["authors"].as<JsonArrayConst>();
     if (!authors.isNull() && authors.size() > 0) {
       book.author = std::string(authors[0].as<const char*>() ? authors[0].as<const char*>() : "");
@@ -401,4 +405,16 @@ HttpDownloader::DownloadError BookOrbitCatalogClient::downloadFile(const int64_t
   // credentials, and mbedTLS cannot complete the handshake on this hardware.
   options.transport = HttpDownloader::Transport::WOLFSSL;
   return HttpDownloader::downloadToFile(url, destPath, std::move(progress), cancelFlag, "", "", std::move(options));
+}
+
+HttpDownloader::DownloadError BookOrbitCatalogClient::downloadCover(const int64_t bookId, const std::string& destPath,
+                                                                     HttpDownloader::DownloadOptions options) {
+  if (!BOOKORBIT_STORE.hasCredentials()) return HttpDownloader::HTTP_ERROR;
+  const std::string url = BOOKORBIT_STORE.getBaseUrl() + "/plugin/catalog/books/" + std::to_string(bookId) + "/thumbnail";
+  options.extraHeaders = authHeaders();
+  options.extraHeaders[0] = {"Accept", "image/jpeg,image/*"};
+  options.transport = HttpDownloader::Transport::WOLFSSL;
+  options.bufferSize = 2048;
+  options.stageAsPart = true;
+  return HttpDownloader::downloadToFile(url, destPath, nullptr, nullptr, "", "", std::move(options));
 }

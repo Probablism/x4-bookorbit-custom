@@ -3,6 +3,7 @@
 #include <Epub.h>
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
+#include <Bitmap.h>
 #include <HalStorage.h>
 #include <I18n.h>
 #include <LibraryBuilder.h>
@@ -15,6 +16,7 @@
 #include <utility>
 
 #include "./BookOrbitCatalogListCache.h"
+#include "./BookOrbitCoverCache.h"
 #include "BookOrbitCredentialStore.h"
 #include "BookOrbitDownloadIndex.h"
 #include "CrossPointState.h"
@@ -58,6 +60,48 @@ constexpr char STAGED_DOWNLOAD_SUFFIX[] = ".part";
 // Marker appended (right-aligned) to catalog rows whose book already exists on the
 // device. U+2022 bullet: guaranteed by the built-in fonts' default glyph intervals.
 constexpr char ON_DEVICE_MARKER[] = "\xE2\x80\xA2";
+constexpr int CATALOG_GRID_COLUMNS = 3;
+constexpr int CATALOG_GRID_ROWS = 2;
+constexpr int CATALOG_GRID_PAGE_SIZE = CATALOG_GRID_COLUMNS * CATALOG_GRID_ROWS;
+constexpr int CATALOG_GRID_GAP = 10;
+constexpr int CATALOG_GRID_LABEL_HEIGHT = 32;
+constexpr int CATALOG_HOME_COLUMNS = 4;
+constexpr int CATALOG_HOME_ROWS = 2;
+constexpr int CATALOG_HOME_PAGE_SIZE = CATALOG_HOME_COLUMNS * CATALOG_HOME_ROWS;
+constexpr int CATALOG_HOME_GAP = 12;
+
+// Minimal monochrome pictograms for the discover tiles. Keeping them as simple
+// renderer primitives makes the catalog independent of theme icon assets and
+// means they remain crisp on the X4's 1-bit display.
+void drawCatalogTileGlyph(GfxRenderer& renderer, const std::string& sectionId, const int centerX, const int centerY) {
+  constexpr int s = 20;
+  if (sectionId == "search") {
+    renderer.drawRect(centerX - 12, centerY - 12, 20, 20, true);
+    renderer.drawLine(centerX + 4, centerY + 4, centerX + 15, centerY + 15, 3, true);
+  } else if (sectionId == "continue-reading" || sectionId == "in-progress") {
+    renderer.drawRect(centerX - s, centerY - 13, s * 2, 27, true);
+    renderer.drawLine(centerX, centerY - 13, centerX, centerY + 14, true);
+    renderer.drawLine(centerX - 14, centerY + 5, centerX - 4, centerY + 5, 2, true);
+  } else if (sectionId == "recent") {
+    renderer.drawRect(centerX - 15, centerY - 15, 30, 30, true);
+    renderer.drawLine(centerX, centerY, centerX, centerY - 10, 2, true);
+    renderer.drawLine(centerX, centerY, centerX + 9, centerY + 5, 2, true);
+  } else if (sectionId == "authors") {
+    renderer.drawRect(centerX - 15, centerY - 14, 30, 28, true);
+    renderer.drawLine(centerX - 11, centerY - 5, centerX + 11, centerY - 5, true);
+    renderer.drawLine(centerX - 11, centerY + 3, centerX + 7, centerY + 3, true);
+    renderer.drawLine(centerX - 11, centerY + 10, centerX + 3, centerY + 10, true);
+  } else if (sectionId == "series" || sectionId == "collections" || sectionId == "libraries") {
+    for (int i = 0; i < 3; ++i) {
+      const int x = centerX - 19 + i * 13;
+      renderer.drawRect(x, centerY - 15 + i * 2, 10, 29 - i * 2, true);
+    }
+  } else {
+    renderer.drawRect(centerX - 17, centerY - 14, 34, 28, true);
+    renderer.drawLine(centerX - 17, centerY - 5, centerX + 17, centerY - 5, true);
+    renderer.drawLine(centerX - 17, centerY + 5, centerX + 17, centerY + 5, true);
+  }
+}
 
 // The SD filename (leading slash, no folder) this firmware falls back to when the
 // server does not say where the file belongs.
@@ -529,14 +573,23 @@ bool BookOrbitCatalogBrowserActivity::loadBooks(const BookOrbitBookQuery& query,
   // Server order carries the listing's meaning -- recency for "Continue reading"
   // and "Recently added", series order for series -- and appending pages keeps
   // it consistent; a client-side re-sort would destroy both.
+  const size_t firstNewEntry = entries.size();
   for (auto& book : result.books) {
     Entry entry;
     entry.type = EntryType::BOOK;
     entry.title = book.title;
     entry.subtitle = book.author;
     entry.bookId = book.id;
+    entry.coverUpdatedAt = book.coverUpdatedAt;
+    if (book.hasCover) entry.coverPath = BookOrbitCoverCache::pathFor(book.id, entry.coverUpdatedAt);
     entry.onDevice = bookOnDevice(book.id, book.title, book.author, entry.path);
     entries.push_back(std::move(entry));
+  }
+  // Only fetch one cover while a page opens. This keeps navigation responsive,
+  // bounds the cache growth rate, and never does networking from render(). The
+  // first visible cover also verifies the server capability for this catalog.
+  if (!cacheHit && allowNetwork && firstNewEntry < entries.size() && !entries[firstNewEntry].coverPath.empty()) {
+    BookOrbitCoverCache::ensure(entries[firstNewEntry].bookId, result.books.front().coverUpdatedAt);
   }
   if (!append) {
     selectorIndex = 0;
@@ -545,6 +598,21 @@ bool BookOrbitCatalogBrowserActivity::loadBooks(const BookOrbitBookQuery& query,
   if (entries.empty()) errorMessage = tr(STR_NO_ENTRIES);
   requestUpdate();
   return true;
+}
+
+bool BookOrbitCatalogBrowserActivity::cacheOneVisibleCover() {
+  if (navLevel != NavLevel::Books || entries.empty()) return false;
+  const int first = std::max(0, (topIndex / CATALOG_GRID_PAGE_SIZE) * CATALOG_GRID_PAGE_SIZE);
+  const int last = std::min(static_cast<int>(entries.size()), first + CATALOG_GRID_PAGE_SIZE);
+  for (int i = first; i < last; ++i) {
+    auto& entry = entries[static_cast<size_t>(i)];
+    if (!entry.coverPath.empty() && !entry.coverFetchAttempted && !Storage.exists(entry.coverPath.c_str())) {
+      entry.coverFetchAttempted = true;
+      if (BookOrbitCoverCache::ensure(entry.bookId, entry.coverUpdatedAt)) requestUpdate();
+      return true;  // one network/decode job per loop pass
+    }
+  }
+  return false;
 }
 
 bool BookOrbitCatalogBrowserActivity::appendNextPageForCurrentList(const bool allowNetwork) {
@@ -1022,6 +1090,10 @@ void BookOrbitCatalogBrowserActivity::loop() {
   if (state == BrowserState::DOWNLOADING) return;
 
   if (state == BrowserState::BROWSING) {
+    // Populate the current visual page progressively. Cover transfer and JPEG
+    // decoding are intentionally kept out of render(), and never run for more
+    // than one tile at a time.
+    if (cacheOneVisibleCover()) return;
     if (longPressFired) {
       if (!mappedInput.isPressed(MappedInputManager::Button::Confirm)) longPressFired = false;
       return;
@@ -1067,7 +1139,10 @@ void BookOrbitCatalogBrowserActivity::loop() {
       };
       // Button navigation moves the selection; the viewport follows it.
       const auto followSelection = [this] {
-        topIndex = followListSelection(selectorIndex, topIndex, visibleRows, static_cast<int>(entries.size()));
+        if (navLevel == NavLevel::Books)
+          topIndex = (selectorIndex / CATALOG_GRID_PAGE_SIZE) * CATALOG_GRID_PAGE_SIZE;
+        else
+          topIndex = followListSelection(selectorIndex, topIndex, visibleRows, static_cast<int>(entries.size()));
       };
       // Swipes do the opposite: they move the viewport and leave the selection
       // where it is. Reaching the end of what is loaded pulls the next page in,
@@ -1161,6 +1236,18 @@ void BookOrbitCatalogBrowserActivity::listScreen(UiApp::ScreenType& screen, void
 
 void BookOrbitCatalogBrowserActivity::buildListScreen(UiApp::ScreenType& screen) {
   const auto& metrics = UITheme::getInstance().getMetrics();
+  if (navLevel == NavLevel::Root) {
+    screen.setContentMargin(fui::Insets{static_cast<int16_t>(CompactHeader::contentTop(metrics)), 0,
+                                        static_cast<int16_t>(metrics.buttonHintsHeight), 0});
+    buildDiscoverHome(screen);
+    return;
+  }
+  if (navLevel == NavLevel::Books) {
+    screen.setContentMargin(fui::Insets{static_cast<int16_t>(CompactHeader::contentTop(metrics)), 0,
+                                        static_cast<int16_t>(metrics.buttonHintsHeight), 0});
+    buildCoverGrid(screen);
+    return;
+  }
   // Content below the compact header band, above the button hints. The header
   // is painted by render(), so the app must not claim its rows.
   screen.setContentMargin(fui::Insets{static_cast<int16_t>(CompactHeader::contentTop(metrics)), 0,
@@ -1207,6 +1294,83 @@ void BookOrbitCatalogBrowserActivity::buildListScreen(UiApp::ScreenType& screen)
     fui::drawListScrollIndicator(screen.target(), listRect, static_cast<uint32_t>(scrollTotal),
                                  static_cast<uint32_t>(visibleRows), static_cast<uint32_t>(topIndex),
                                  theme.listScrollWidth, theme.listScrollSide, theme.listScrollInset);
+  }
+}
+
+void BookOrbitCatalogBrowserActivity::buildDiscoverHome(UiApp::ScreenType& screen) {
+  const fui::Rect area = screen.body();
+  const int cellWidth = std::max(1, (area.width - (CATALOG_HOME_COLUMNS - 1) * CATALOG_HOME_GAP) /
+                                   CATALOG_HOME_COLUMNS);
+  const int cellHeight = std::max(1, (area.height - (CATALOG_HOME_ROWS - 1) * CATALOG_HOME_GAP) /
+                                    CATALOG_HOME_ROWS);
+  visibleRows = CATALOG_HOME_PAGE_SIZE;
+  topIndex = std::max(0, (topIndex / CATALOG_HOME_PAGE_SIZE) * CATALOG_HOME_PAGE_SIZE);
+  const int visible = std::min(CATALOG_HOME_PAGE_SIZE, static_cast<int>(entries.size()) - topIndex);
+
+  for (int slot = 0; slot < visible; ++slot) {
+    const int index = topIndex + slot;
+    const auto& entry = entries[static_cast<size_t>(index)];
+    const int column = slot % CATALOG_HOME_COLUMNS;
+    const int row = slot / CATALOG_HOME_COLUMNS;
+    const int x = area.x + column * (cellWidth + CATALOG_HOME_GAP);
+    const int y = area.y + row * (cellHeight + CATALOG_HOME_GAP);
+    const bool selected = index == selectorIndex;
+    if (selected) renderer.fillRectDither(x, y, cellWidth, cellHeight, Color::LightGray);
+    renderer.drawRect(x, y, cellWidth, cellHeight, true);
+
+    const int glyphY = y + std::max(32, cellHeight / 2 - 22);
+    drawCatalogTileGlyph(renderer, entry.sectionId, x + cellWidth / 2, glyphY);
+    const auto lines = renderer.wrappedText(UI_10_FONT_ID, entry.title.c_str(), cellWidth - 16, 2);
+    const int lineHeight = renderer.getLineHeight(UI_10_FONT_ID);
+    int labelY = y + cellHeight - 13 - static_cast<int>(lines.size()) * lineHeight;
+    for (const auto& line : lines) {
+      const int labelX = x + (cellWidth - renderer.getTextWidth(UI_10_FONT_ID, line.c_str())) / 2;
+      renderer.drawText(UI_10_FONT_ID, labelX, labelY, line.c_str());
+      labelY += lineHeight;
+    }
+    screen.frame().hit(fui::Rect{static_cast<int16_t>(x), static_cast<int16_t>(y), static_cast<int16_t>(cellWidth),
+                                 static_cast<int16_t>(cellHeight)},
+                       ACTION_ROW, static_cast<int16_t>(index), fui::InputTouch | fui::InputLongPress);
+  }
+}
+
+void BookOrbitCatalogBrowserActivity::buildCoverGrid(UiApp::ScreenType& screen) {
+  const fui::Rect area = screen.body();
+  const int cellWidth = std::max(1, (area.width - (CATALOG_GRID_COLUMNS - 1) * CATALOG_GRID_GAP) / CATALOG_GRID_COLUMNS);
+  const int cellHeight = std::max(1, (area.height - (CATALOG_GRID_ROWS - 1) * CATALOG_GRID_GAP) / CATALOG_GRID_ROWS);
+  const int coverHeight = std::max(1, cellHeight - CATALOG_GRID_LABEL_HEIGHT);
+  const int coverWidth = std::min(cellWidth, coverHeight * BookOrbitCoverCache::THUMB_WIDTH / BookOrbitCoverCache::THUMB_HEIGHT);
+  visibleRows = CATALOG_GRID_PAGE_SIZE;
+  topIndex = std::max(0, (topIndex / CATALOG_GRID_PAGE_SIZE) * CATALOG_GRID_PAGE_SIZE);
+  const int visible = std::min(CATALOG_GRID_PAGE_SIZE, static_cast<int>(entries.size()) - topIndex);
+
+  for (int slot = 0; slot < visible; ++slot) {
+    const int index = topIndex + slot;
+    const auto& entry = entries[static_cast<size_t>(index)];
+    const int column = slot % CATALOG_GRID_COLUMNS;
+    const int row = slot / CATALOG_GRID_COLUMNS;
+    const int x = area.x + column * (cellWidth + CATALOG_GRID_GAP) + (cellWidth - coverWidth) / 2;
+    const int y = area.y + row * (cellHeight + CATALOG_GRID_GAP);
+    bool drawn = false;
+    if (!entry.coverPath.empty() && Storage.exists(entry.coverPath.c_str())) {
+      FsFile cover;
+      if (Storage.openFileForRead("BookOrbit", entry.coverPath, cover)) {
+        Bitmap bitmap(cover);
+        if (bitmap.parseHeaders() == BmpReaderError::Ok) drawn = renderer.drawBitmap(bitmap, x, y, coverWidth, coverHeight);
+        cover.close();
+      }
+    }
+    if (!drawn) {
+      renderer.fillRect(x, y, coverWidth, coverHeight, Color::White);
+      renderer.drawRect(x, y, coverWidth, coverHeight, true);
+    }
+    if (index == selectorIndex) renderer.drawRect(x - 3, y - 3, coverWidth + 6, coverHeight + 6, true);
+    const std::string label = renderer.truncatedText(UI_10_FONT_ID, entry.title.c_str(), cellWidth - 2);
+    const int labelX = x + (coverWidth - renderer.getTextWidth(UI_10_FONT_ID, label.c_str())) / 2;
+    renderer.drawText(UI_10_FONT_ID, labelX, y + coverHeight + 3, label.c_str());
+    screen.frame().hit(fui::Rect{static_cast<int16_t>(x), static_cast<int16_t>(y), static_cast<int16_t>(coverWidth),
+                                 static_cast<int16_t>(cellHeight)},
+                       ACTION_ROW, static_cast<int16_t>(index), fui::InputTouch | fui::InputLongPress);
   }
 }
 
@@ -1280,6 +1444,27 @@ void BookOrbitCatalogBrowserActivity::render(RenderLock&&) {
     uiReady = false;
     app.render();
     uiReady = true;
+    // A selected-book cover is a compact visual preview above text catalogs.
+    // It is read only during render; downloads and JPEG decoding happen while
+    // the list is loading, never on the renderer task.
+    if (false && navLevel == NavLevel::Books && selectorIndex >= 0 && selectorIndex < static_cast<int>(entries.size())) {
+      const auto& selected = entries[selectorIndex];
+      if (!selected.coverPath.empty() && Storage.exists(selected.coverPath.c_str())) {
+        FsFile cover;
+        if (Storage.openFileForRead("BookOrbit", selected.coverPath, cover)) {
+          Bitmap bitmap(cover);
+          if (bitmap.parseHeaders() == BmpReaderError::Ok) {
+            constexpr int coverWidth = BookOrbitCoverCache::THUMB_WIDTH;
+            constexpr int coverHeight = BookOrbitCoverCache::THUMB_HEIGHT;
+            const int x = (pageWidth - coverWidth) / 2;
+            const int y = CompactHeader::contentTop(metrics) + 2;
+            renderer.drawBitmap(bitmap, x, y, coverWidth, coverHeight);
+            renderer.drawRect(x - 1, y - 1, coverWidth + 2, coverHeight + 2, true);
+          }
+          cover.close();
+        }
+      }
+    }
   }
   renderer.displayBuffer();
 }

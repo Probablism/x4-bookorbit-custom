@@ -31,6 +31,10 @@ struct BookOrbitCatalogBook {
   int64_t id = 0;
   std::string title;
   std::string author;  // first author only, for compact list display
+  // Covers are deliberately opt-in: older BookOrbit servers omit these fields
+  // and continue to behave as the text-only catalog did.
+  bool hasCover = false;
+  std::string coverUpdatedAt;
 };
 
 /** One entry in a drill-down facet listing (an author, a series or a collection). */
@@ -107,7 +111,8 @@ struct BookOrbitCatalogCounts {
  * listings (recently added, continue reading, all books, search), the
  * authors/series/collections/libraries/smart-scopes drill-down facets, the
  * root's per-section counts, and downloading an EPUB file from a book's detail.
- * Covers, ratings and read-status editing are out of scope.
+ * Ratings and read-status editing are out of scope. On X4 Pro, callers may
+ * stream an advertised cover into a small local thumbnail cache.
  */
 class BookOrbitCatalogClient {
  public:
@@ -161,4 +166,8 @@ class BookOrbitCatalogClient {
   static HttpDownloader::DownloadError downloadFile(
       int64_t fileId, const std::string& destPath, HttpDownloader::ProgressCallback progress = nullptr,
       bool* cancelFlag = nullptr, HttpDownloader::DownloadOptions options = HttpDownloader::DownloadOptions());
+
+  /** Download a book cover JPEG advertised by the catalog. */
+  static HttpDownloader::DownloadError downloadCover(int64_t bookId, const std::string& destPath,
+                                                      HttpDownloader::DownloadOptions options = HttpDownloader::DownloadOptions());
 };

@@ -35,6 +35,9 @@ class BookOrbitCatalogBrowserActivity final : public Activity {
     std::string sectionId;  // section id (SECTION/FACET_SECTION/LOCAL_SECTION) or facet entry id (FACET)
     std::string seriesId;   // numeric series id, for FACET entries of the series facet
     std::string path;       // SD path: LOCAL_BOOK entries, and BOOK entries already on the device
+    std::string coverPath;  // display-ready BookOrbit thumbnail, X4 Pro catalogs only
+    std::string coverUpdatedAt;
+    bool coverFetchAttempted = false;  // avoid retrying a missing/broken server cover every UI loop
     int64_t bookId = 0;
     bool onDevice = false;  // BOOK entries: a matching file already exists on the device (at `path`)
   };
@@ -99,6 +102,11 @@ class BookOrbitCatalogBrowserActivity final : public Activity {
   static void listScreen(UiApp::ScreenType& screen, void* user);
   static void onRowEvent(const freeink::ui::ActionEvent& event, void* user);
   void buildListScreen(UiApp::ScreenType& screen);
+  // The catalog root is intentionally not a text list: it is a compact
+  // discovery landing page whose tiles open the same durable sections.
+  void buildDiscoverHome(UiApp::ScreenType& screen);
+  void buildCoverGrid(UiApp::ScreenType& screen);
+  bool cacheOneVisibleCover();
   void activateSelected();
   void openLocalBook(const std::string& path);
   void showBookActionMenu(bool ignoreInitialConfirmRelease);

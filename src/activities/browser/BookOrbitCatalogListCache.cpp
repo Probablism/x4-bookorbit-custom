@@ -228,6 +228,8 @@ bool loadBooksPage(const BookOrbitBookQuery& query, const int page, BookOrbitBoo
     book.id = item["id"] | 0;
     book.title = std::string(item["title"] | "");
     book.author = std::string(item["author"] | "");
+    book.hasCover = item["hasCover"] | false;
+    book.coverUpdatedAt = std::string(item["coverUpdatedAt"] | "");
     outPage.books.push_back(std::move(book));
   }
   return true;
@@ -248,6 +250,8 @@ void saveBooksPage(const BookOrbitBookQuery& query, const int page, const BookOr
     appendJsonEscaped(json, pageData.books[i].title);
     json += ",\"author\":";
     appendJsonEscaped(json, pageData.books[i].author);
+    json += ",\"hasCover\":" + std::string(pageData.books[i].hasCover ? "true" : "false") + ",\"coverUpdatedAt\":";
+    appendJsonEscaped(json, pageData.books[i].coverUpdatedAt);
     json += "}";
   }
   json += "]}";
