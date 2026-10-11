@@ -5,6 +5,8 @@
 #include <string>
 #include <vector>
 
+#include "clippings/AnnotationStyle.h"
+
 inline constexpr size_t CLIPPING_CHAPTER_TITLE_MAX = 48;
 // Clipping text lives on the SD card rather than in every in-memory clipping
 // record. Match the reader's bounded selection-text budget so previews retain
@@ -43,6 +45,7 @@ struct Clipping {
   uint32_t textOffset = 0;
   uint16_t textLength = 0;
   uint16_t tableSelection = UINT16_MAX;
+  ClippingAnnotationStyle annotationStyle = ClippingAnnotationStyle::Highlight;
   // Session-only migration state, intentionally omitted from the on-disk
   // record.
   uint8_t resolvedLayoutBoundaries = 0;
@@ -82,7 +85,8 @@ class ClippingStore {
   AddResult addClipping(uint16_t spineIndex, uint16_t startPage, uint16_t endPage, uint16_t pageCount,
                         uint16_t startWordIndex, uint16_t endWordIndex, uint16_t wordCount, const char* chapterTitle,
                         uint16_t paragraphIndex, const std::string& text, uint16_t tableSelection,
-                        uint32_t layoutSignature);
+                        uint32_t layoutSignature,
+                        ClippingAnnotationStyle annotationStyle = ClippingAnnotationStyle::Highlight);
   bool removeClippingAt(size_t index);
   // Replaces one clipping's stored text (capped at CLIPPING_TEXT_MAX), rewriting the file.
   // Used when the exact source text of a highlight becomes known after the clipping was built

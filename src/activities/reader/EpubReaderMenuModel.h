@@ -30,6 +30,7 @@ enum class EpubReaderMenuAction : uint8_t {
   VIEW_BOOKMARKS,
   DELETE_BOOKMARKS,
   SAVE_CLIPPING,
+  SAVE_UNDERLINE,
   VIEW_CLIPPINGS,
   LOOKUP,
   LOOKUP_HISTORY,
@@ -122,6 +123,7 @@ enum class ReaderDrawerCatalogItem : uint8_t {
   Lookup,
   LookupHistory,
   SaveClipping,
+  SaveUnderline,
   ViewClippings,
   DeleteBookmarks,
   StatusBar,
@@ -220,6 +222,7 @@ constexpr ReaderDrawerCatalog makeReaderDrawerCatalog(const ReaderDrawerAvailabi
     location.add(ReaderDrawerCatalogItem::DeleteBookmarks);
   }
   location.add(ReaderDrawerCatalogItem::SaveClipping);
+  location.add(ReaderDrawerCatalogItem::SaveUnderline);
   if (available.hasClippings) location.add(ReaderDrawerCatalogItem::ViewClippings);
   if (available.buttonDevice) {
     if (available.hasBookOrbitSync) location.add(ReaderDrawerCatalogItem::BookOrbitSync);

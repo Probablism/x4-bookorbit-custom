@@ -52,7 +52,8 @@ ClipSelectionActivity::ClipSelectionActivity(GfxRenderer& renderer, MappedInputM
                                              ClipWordStore wordStore, const int fontId, Section& section,
                                              const int startPageInSection, const int marginTop, const int marginLeft,
                                              const DictionaryClippingRequest* dictionaryRequest,
-                                             const bool ignoreInitialBackRelease)
+                                             const bool ignoreInitialBackRelease,
+                                             const ClippingAnnotationStyle annotationStyle)
     : Activity("ClipSelection", renderer, mappedInput),
       wordStore(std::move(wordStore)),
       renderFontId(fontId),
@@ -62,7 +63,8 @@ ClipSelectionActivity::ClipSelectionActivity(GfxRenderer& renderer, MappedInputM
       marginLeft(marginLeft),
       hasDictionaryRequest(dictionaryRequest != nullptr),
       ignoreInitialBackRelease(ignoreInitialBackRelease),
-      dictionaryRequest(dictionaryRequest ? *dictionaryRequest : DictionaryClippingRequest{}) {}
+      dictionaryRequest(dictionaryRequest ? *dictionaryRequest : DictionaryClippingRequest{}),
+      annotationStyle(annotationStyle) {}
 
 void ClipSelectionActivity::onEnter() {
   Activity::onEnter();
@@ -425,6 +427,7 @@ void ClipSelectionActivity::confirmSelection() {
   if (const auto paragraphIndex = section.getParagraphIndexForPage(result.sectionPage)) {
     result.paragraphIndex = *paragraphIndex;
   }
+  result.annotationStyle = static_cast<uint8_t>(annotationStyle);
   // onExit() restores savedSectionPage so cancelling a clipping does not move
   // the reader. A confirmed selection instead resumes at the final cursor,
   // including when that cursor advanced onto the next page.

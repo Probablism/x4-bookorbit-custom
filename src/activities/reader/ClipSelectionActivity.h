@@ -12,6 +12,7 @@
 
 #include "WordRef.h"
 #include "activities/Activity.h"
+#include "clippings/AnnotationStyle.h"
 #include "util/ButtonNavigator.h"
 
 struct ClipWordStyle {
@@ -29,7 +30,8 @@ class ClipSelectionActivity final : public Activity {
   ClipSelectionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, ClipWordStore wordStore, int fontId,
                         Section& section, int startPageInSection, int marginTop, int marginLeft,
                         const DictionaryClippingRequest* dictionaryRequest = nullptr,
-                        bool ignoreInitialBackRelease = false);
+                        bool ignoreInitialBackRelease = false,
+                        ClippingAnnotationStyle annotationStyle = ClippingAnnotationStyle::Highlight);
 
   void onEnter() override;
   void onExit() override;
@@ -73,6 +75,7 @@ class ClipSelectionActivity final : public Activity {
   bool ignoreInitialPowerRelease = false;
   bool ignoreInitialBackRelease = false;
   DictionaryClippingRequest dictionaryRequest{};
+  ClippingAnnotationStyle annotationStyle = ClippingAnnotationStyle::Highlight;
   std::array<uint16_t, MAX_READING_ORDER_WORDS> readingOrder{};
   size_t readingOrderSize = 0;
 

@@ -4153,6 +4153,10 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuAction action, const 
       startClipSelection();
       break;
     }
+    case EpubReaderMenuAction::SAVE_UNDERLINE: {
+      startClipSelection(nullptr, false, ClippingAnnotationStyle::Underline);
+      break;
+    }
     case EpubReaderMenuAction::LOOKUP: {
       openWordSelect(/*framebufferContainsPage=*/false);
       break;
@@ -4950,7 +4954,8 @@ void EpubReaderActivity::openAutoPageTurnIntervalPicker(const bool ignoreInitial
 }
 
 void EpubReaderActivity::startClipSelection(const DictionaryClippingRequest* dictionaryRequest,
-                                            const bool ignoreInitialBackRelease) {
+                                            const bool ignoreInitialBackRelease,
+                                            const ClippingAnnotationStyle annotationStyle) {
   if (!section || !epub) {
     requestUpdate();
     return;
@@ -5230,7 +5235,7 @@ void EpubReaderActivity::startClipSelection(const DictionaryClippingRequest* dic
   pauseReadingPaceTimer("clip_selection");
   auto clipSelection = makeUniqueNoThrow<ClipSelectionActivity>(
       renderer, mappedInput, std::move(wordStore), readerFontId, *section, startPage, layout.marginTop,
-      layout.marginLeft, dictionaryRequest, ignoreInitialBackRelease);
+      layout.marginLeft, dictionaryRequest, ignoreInitialBackRelease, annotationStyle);
   if (!clipSelection) {
     LOG_ERR("CLIP", "OOM: failed to allocate clip selection activity");
     resumeReadingPaceTimer("clip_selection_alloc_failed");
@@ -5250,7 +5255,10 @@ void EpubReaderActivity::startClipSelection(const DictionaryClippingRequest* dic
         const auto addResult = CLIPPINGS.addClipping(
             static_cast<uint16_t>(currentSpineIndex), clip.sectionPage, clip.endSectionPage, clip.sectionPageCount,
             clip.startPageWordIndex, clip.endPageWordIndex, clip.wordCount, chapterTitle.c_str(), clip.paragraphIndex,
-            clip.text, clip.tableSelection, clippingLayoutSignature);
+            clip.text, clip.tableSelection, clippingLayoutSignature,
+            isValidClippingAnnotationStyle(clip.annotationStyle)
+                ? static_cast<ClippingAnnotationStyle>(clip.annotationStyle)
+                : ClippingAnnotationStyle::Highlight);
         bool exported = false;
         if (addResult == ClippingStore::AddResult::Added) {
           recordAnnotationPosition(clippingIndex, clip.paragraphIndex, clip.text);
@@ -8168,6 +8176,7 @@ void EpubReaderActivity::drawClippingHighlights(const Page& page, const int font
   // the glyphs and makes a saved clipping look washed out.
 
   std::array<ClippingPageMatch, CLIPPING_MAX_PAGE_MATCHES> matches;
+  std::array<ClippingAnnotationStyle, CLIPPING_MAX_PAGE_MATCHES> matchStyles;
   uint16_t matchCount = 0;
   const bool canUseStoredRanges = section->pageCount > 0 && section->pageCount <= UINT16_MAX &&
                                   section->currentPage >= 0 && section->currentPage < section->pageCount;
@@ -8225,7 +8234,9 @@ void EpubReaderActivity::drawClippingHighlights(const Page& page, const int font
       }
     }
     if (matchedStoredRange || matchedText) {
-      matches[matchCount++] = match;
+      matches[matchCount] = match;
+      matchStyles[matchCount] = clipping.annotationStyle;
+      ++matchCount;
       if (matchCount >= matches.size()) {
         break;
       }
@@ -8235,22 +8246,23 @@ void EpubReaderActivity::drawClippingHighlights(const Page& page, const int font
     return;
   }
 
-  const auto isHighlightedWord = [&matches, matchCount](const uint16_t pageWordIndex, const PageTextLine& line) {
-    for (uint16_t matchIndex = 0; matchIndex < matchCount; ++matchIndex) {
-      if (pageWordIndex >= matches[matchIndex].startWord && pageWordIndex <= matches[matchIndex].endWord &&
-          ClippingHighlightGeometry::matchesTableSelection(matches[matchIndex].tableSelection, line.tableSelection)) {
-        return true;
-      }
-    }
-    return false;
-  };
-
   ClippingHighlightGeometry::WordRect previousHighlight;
   const TextBlock* previousHighlightBlock = nullptr;
+  ClippingAnnotationStyle previousAnnotationStyle = ClippingAnnotationStyle::Highlight;
   bool hasPreviousHighlight = false;
   forEachVisiblePageWord(page, [&](const uint16_t pageWordIndex, const PageTextLine& line, const TextBlock& block,
                                    const size_t i) {
-    if (!isHighlightedWord(pageWordIndex, line)) {
+    bool selected = false;
+    ClippingAnnotationStyle annotationStyle = ClippingAnnotationStyle::Highlight;
+    for (uint16_t matchIndex = 0; matchIndex < matchCount; ++matchIndex) {
+      if (pageWordIndex >= matches[matchIndex].startWord && pageWordIndex <= matches[matchIndex].endWord &&
+          ClippingHighlightGeometry::matchesTableSelection(matches[matchIndex].tableSelection, line.tableSelection)) {
+        selected = true;
+        annotationStyle = matchStyles[matchIndex];
+        break;
+      }
+    }
+    if (!selected) {
       hasPreviousHighlight = false;
       return true;
     }
@@ -8280,7 +8292,17 @@ void EpubReaderActivity::drawClippingHighlights(const Page& page, const int font
       const int nextSkipX = nextHasEmSpace ? renderer.getTextAdvanceX(lineFontId, "\xe2\x80\x83", nextTextStyle) : 0;
       const PageWordGeometry nextGeometry = pageWordGeometry(renderer, fontId, line, block, nextIndex);
       const int nextWordX = orientedMarginLeft + line.xPos + nextGeometry.xOffset + nextSkipX;
-      if (isHighlightedWord(pageWordIndex + 1, line) && nextWordX > wordX + wordW) {
+      bool nextWordSelected = false;
+      ClippingAnnotationStyle nextAnnotationStyle = ClippingAnnotationStyle::Highlight;
+      for (uint16_t matchIndex = 0; matchIndex < matchCount; ++matchIndex) {
+        if (pageWordIndex + 1 >= matches[matchIndex].startWord && pageWordIndex + 1 <= matches[matchIndex].endWord &&
+            ClippingHighlightGeometry::matchesTableSelection(matches[matchIndex].tableSelection, line.tableSelection)) {
+          nextWordSelected = true;
+          nextAnnotationStyle = matchStyles[matchIndex];
+          break;
+        }
+      }
+      if (nextWordSelected && nextAnnotationStyle == annotationStyle && nextWordX > wordX + wordW) {
         wordW = nextWordX - wordX;
       } else if (nextWordX > wordX && wordW > nextWordX - wordX) {
         wordW = nextWordX - wordX;
@@ -8288,11 +8310,21 @@ void EpubReaderActivity::drawClippingHighlights(const Page& page, const int font
     }
     if (wordW > 0) {
       const ClippingHighlightGeometry::WordRect currentHighlight{pageWordIndex, wordX, wordY, wordW, wordH};
+      if (annotationStyle == ClippingAnnotationStyle::Underline) {
+        // This uses the same reflow-resolved word geometry as highlights. It is
+        // a post-text BW overlay, so no glyph redraw or render-path allocation is needed.
+        renderer.drawLine(wordX, wordY + wordH - 2, wordX + wordW, wordY + wordH - 2, true);
+        previousHighlight = currentHighlight;
+        previousHighlightBlock = &block;
+        previousAnnotationStyle = annotationStyle;
+        hasPreviousHighlight = true;
+        return true;
+      }
       ClippingHighlightGeometry::GapRect gap;
       // No-break spaces are stored as hidden layout words. Bridge to the next
       // visible word in the same line even when that hidden token interrupted
       // the immediate-word lookahead above.
-      if (hasPreviousHighlight && previousHighlightBlock == &block &&
+      if (hasPreviousHighlight && previousHighlightBlock == &block && previousAnnotationStyle == annotationStyle &&
           ClippingHighlightGeometry::gapBetweenAdjacentWords(previousHighlight, currentHighlight, gap)) {
         renderer.fillRectDither(gap.x, gap.y, gap.width, gap.height, Color::LightGray);
       }
@@ -8325,6 +8357,7 @@ void EpubReaderActivity::drawClippingHighlights(const Page& page, const int font
       }
       previousHighlight = currentHighlight;
       previousHighlightBlock = &block;
+      previousAnnotationStyle = annotationStyle;
       hasPreviousHighlight = true;
     } else {
       hasPreviousHighlight = false;

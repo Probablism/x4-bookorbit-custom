@@ -16,6 +16,7 @@
 
 #include "BookReadingStats.h"
 #include "BookmarkStore.h"
+#include "clippings/AnnotationStyle.h"
 #include "EndOfBookOptions.h"
 #include "EpubLinkReturnState.h"
 #include "EpubReaderMenuModel.h"
@@ -448,7 +449,8 @@ class EpubReaderActivity final : public Activity {
   void openFileTransfer();
   void openAutoPageTurnIntervalPicker(bool ignoreInitialConfirmRelease = false, bool returnToReaderMenu = false);
   void startClipSelection(const DictionaryClippingRequest* dictionaryRequest = nullptr,
-                          bool ignoreInitialBackRelease = false);
+                          bool ignoreInitialBackRelease = false,
+                          ClippingAnnotationStyle annotationStyle = ClippingAnnotationStyle::Highlight);
   void resetReadingPaceData();
   void captureGlobalReaderSettings();
   void restoreGlobalReaderSettings();

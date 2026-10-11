@@ -1835,6 +1835,9 @@ void EpubReaderDrawerActivity::activateRow(const RowId row) {
     case RowId::SaveClipping:
       action = EpubReaderMenuAction::SAVE_CLIPPING;
       break;
+    case RowId::SaveUnderline:
+      action = EpubReaderMenuAction::SAVE_UNDERLINE;
+      break;
     case RowId::ViewClippings:
       action = EpubReaderMenuAction::VIEW_CLIPPINGS;
       break;
@@ -3024,6 +3027,8 @@ const char* EpubReaderDrawerActivity::rowLabel(const RowId row) const {
       return tr(STR_LOOKUP_HISTORY);
     case RowId::SaveClipping:
       return tr(STR_SAVE_CLIPPING);
+    case RowId::SaveUnderline:
+      return tr(STR_SAVE_UNDERLINE);
     case RowId::ViewClippings:
       return tr(STR_VIEW_CLIPPINGS);
     case RowId::DeleteBookmarks:
