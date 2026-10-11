@@ -28,9 +28,6 @@ class CoverGridHomeUi final : public UiAppHost<16, 1> {
     Library,
     Opds,
     BookOrbit,
-#if (defined(FREEINK_DEVICE_X4PRO) && FREEINK_DEVICE_X4PRO) || defined(SIMULATOR_DEVICE_X4_PRO)
-    Notebook,
-#endif
     Transfer,
     Settings,
     Count

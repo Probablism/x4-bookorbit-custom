@@ -1,5 +1,4 @@
 #include "HomeActivity.h"
-
 #include <Bitmap.h>
 #include <Epub.h>
 #include <FsHelpers.h>
@@ -36,9 +35,6 @@
 #include "RecentBookProgress.h"
 #include "RecentBooksStore.h"
 #include "SavedItemsHomeActivity.h"
-#if (defined(FREEINK_DEVICE_X4PRO) && FREEINK_DEVICE_X4PRO) || defined(SIMULATOR_DEVICE_X4_PRO)
-#include "activities/notebook/NotebookActivity.h"
-#endif
 #include "components/UITheme.h"
 #include "components/themes/dashboard/DashboardTheme.h"
 #include "components/themes/lyra/LyraCarouselTheme.h"
@@ -63,9 +59,6 @@ enum class HomeMenuAction {
   Library,
   OpdsBrowser,
   BookOrbitCatalog,
-#if (defined(FREEINK_DEVICE_X4PRO) && FREEINK_DEVICE_X4PRO) || defined(SIMULATOR_DEVICE_X4_PRO)
-  Notebook,
-#endif
   ReadingStats,
   Bookmarks,
   FileTransfer,
@@ -261,9 +254,6 @@ void appendHomeMenuItems(HomeMenuEntries& items, bool hasOpdsServers, bool hasRe
   if (BOOKORBIT_STORE.hasCredentials()) {
     items.push({tr(STR_BOOKORBIT), Library, HomeMenuAction::BookOrbitCatalog});
   }
-#if (defined(FREEINK_DEVICE_X4PRO) && FREEINK_DEVICE_X4PRO) || defined(SIMULATOR_DEVICE_X4_PRO)
-  items.push({tr(STR_NOTEBOOK), Text, HomeMenuAction::Notebook});
-#endif
   if (hasReadingStats) {
     items.push({tr(STR_READING_STATS), Chart, HomeMenuAction::ReadingStats});
   }
@@ -295,9 +285,6 @@ HomeMenuEntries buildMinimalMenuItems(bool hasOpdsServers, bool hasReadingStats,
   if (BOOKORBIT_STORE.hasCredentials()) {
     items.push({tr(STR_BOOKORBIT), Library, HomeMenuAction::BookOrbitCatalog});
   }
-#if (defined(FREEINK_DEVICE_X4PRO) && FREEINK_DEVICE_X4PRO) || defined(SIMULATOR_DEVICE_X4_PRO)
-  items.push({tr(STR_NOTEBOOK), Text, HomeMenuAction::Notebook});
-#endif
   if (hasBookmarks || hasClippings) {
     items.push({savedItemsLabel(hasBookmarks, hasClippings), BookmarkIcon, HomeMenuAction::Bookmarks});
   }
@@ -1525,11 +1512,6 @@ void HomeActivity::loop() {
           case HomeMenuAction::BookOrbitCatalog:
             activityManager.goToBookOrbitCatalog();
             break;
-#if (defined(FREEINK_DEVICE_X4PRO) && FREEINK_DEVICE_X4PRO) || defined(SIMULATOR_DEVICE_X4_PRO)
-          case HomeMenuAction::Notebook:
-            onNotebookOpen();
-            break;
-#endif
           case HomeMenuAction::ReadingStats:
             onReadingStatsOpen();
             break;
@@ -1778,11 +1760,6 @@ void HomeActivity::loop() {
       case HomeMenuAction::BookOrbitCatalog:
         activityManager.goToBookOrbitCatalog();
         break;
-#if (defined(FREEINK_DEVICE_X4PRO) && FREEINK_DEVICE_X4PRO) || defined(SIMULATOR_DEVICE_X4_PRO)
-      case HomeMenuAction::Notebook:
-        onNotebookOpen();
-        break;
-#endif
       case HomeMenuAction::ReadingStats:
         onReadingStatsOpen();
         break;
@@ -2098,11 +2075,6 @@ void HomeActivity::activateCoverGridSelection() {
     case CoverGridHomeUi::Tab::BookOrbit:
       activityManager.goToBookOrbitCatalog();
       break;
-#if (defined(FREEINK_DEVICE_X4PRO) && FREEINK_DEVICE_X4PRO) || defined(SIMULATOR_DEVICE_X4_PRO)
-    case CoverGridHomeUi::Tab::Notebook:
-      onNotebookOpen();
-      break;
-#endif
     case CoverGridHomeUi::Tab::Transfer:
       onFileTransferOpen();
       break;
@@ -2495,14 +2467,3 @@ void HomeActivity::onSavedItemsOpen() {
   startActivityForResult(std::make_unique<SavedItemsHomeActivity>(renderer, mappedInput),
                          [this](const ActivityResult&) { requestUpdate(); });
 }
-
-#if (defined(FREEINK_DEVICE_X4PRO) && FREEINK_DEVICE_X4PRO) || defined(SIMULATOR_DEVICE_X4_PRO)
-void HomeActivity::onNotebookOpen() {
-  auto notebook = makeUniqueNoThrow<NotebookActivity>(renderer, mappedInput);
-  if (!notebook) {
-    LOG_ERR("HOME", "OOM: NotebookActivity");
-    return;
-  }
-  startActivityForResult(std::move(notebook), [this](const ActivityResult&) { requestUpdate(); });
-}
-#endif

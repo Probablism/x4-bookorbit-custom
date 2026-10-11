@@ -221,15 +221,9 @@ void CoverGridHomeUi::drawLauncher(UiScreen& screen) {
   // Indexed by Tab.
   static constexpr const freeink::Icon* ICONS[MAX_TABS] = {
       &icon_folder_32, &icon_landmark_32, &icon_lyra_library_32, &icon_bookorbit_32,
-#if (defined(FREEINK_DEVICE_X4PRO) && FREEINK_DEVICE_X4PRO) || defined(SIMULATOR_DEVICE_X4_PRO)
-      &icon_file_text_32,
-#endif
       &icon_lyra_transfer_32, &icon_lyra_settings_32};
   static constexpr StrId LABELS[MAX_TABS] = {
       StrId::STR_BROWSE_FILES, StrId::STR_LIBRARY, StrId::STR_OPDS_BROWSER, StrId::STR_BOOKORBIT,
-#if (defined(FREEINK_DEVICE_X4PRO) && FREEINK_DEVICE_X4PRO) || defined(SIMULATOR_DEVICE_X4_PRO)
-      StrId::STR_NOTEBOOK,
-#endif
       StrId::STR_FILE_TRANSFER, StrId::STR_SETTINGS_TITLE};
   const int count = tabCount(hasOpds, hasBookOrbit);
   if (count <= 0) return;
