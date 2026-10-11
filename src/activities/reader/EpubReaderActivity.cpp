@@ -8446,7 +8446,18 @@ void EpubReaderActivity::drawClippingHighlights(const Page& page, const int font
       if (annotationStyle == ClippingAnnotationStyle::Underline) {
         // This uses the same reflow-resolved word geometry as highlights. It is
         // a post-text BW overlay, so no glyph redraw or render-path allocation is needed.
-        renderer.drawLine(wordX, wordY + wordH - 2, wordX + wordW, wordY + wordH - 2, true);
+        // Page layout can legally extend a word's advance one pixel into the
+        // right/bottom clip edge. fillRectDither() used by highlights clips that
+        // case internally, but the low-level line primitive does not on every
+        // X4 display driver. Clamp here before touching the framebuffer.
+        const int screenWidth = renderer.getScreenWidth();
+        const int screenHeight = renderer.getScreenHeight();
+        const int underlineY = wordY + wordH - 2;
+        const int underlineLeft = std::max(0, wordX);
+        const int underlineRight = std::min(screenWidth - 1, wordX + wordW - 1);
+        if (underlineY >= 0 && underlineY < screenHeight && underlineLeft <= underlineRight) {
+          renderer.drawLine(underlineLeft, underlineY, underlineRight, underlineY, true);
+        }
         previousHighlight = currentHighlight;
         previousHighlightBlock = &block;
         previousAnnotationStyle = annotationStyle;
