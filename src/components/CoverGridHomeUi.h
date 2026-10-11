@@ -22,7 +22,18 @@ class CoverGridHomeUi final : public UiAppHost<16, 1> {
   // The tab bar's entries, in display order. OPDS and this fork's BookOrbit catalog only
   // take a slot once they are set up, so positions are resolved through the helpers
   // below rather than counted by hand.
-  enum class Tab : uint8_t { Files, Library, Opds, BookOrbit, Transfer, Settings, Count };
+  enum class Tab : uint8_t {
+    Files,
+    Library,
+    Opds,
+    BookOrbit,
+#if (defined(FREEINK_DEVICE_X4PRO) && FREEINK_DEVICE_X4PRO) || defined(SIMULATOR_DEVICE_X4_PRO)
+    Notebook,
+#endif
+    Transfer,
+    Settings,
+    Count
+  };
   static constexpr int MAX_TABS = static_cast<int>(Tab::Count);
   static int tabCount(bool hasOpds, bool hasBookOrbit);
   // Tab::Count when the position is outside the bar.

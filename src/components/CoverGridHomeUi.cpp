@@ -260,9 +260,12 @@ void CoverGridHomeUi::drawGrid(UiScreen& screen) {
 
 void CoverGridHomeUi::drawTabs(UiScreen& screen, fui::Rect rect) {
   // Indexed by Tab.
-  static constexpr const freeink::Icon* ICONS[MAX_TABS] = {&icon_folder_32,        &icon_landmark_32,
-                                                           &icon_lyra_library_32,  &icon_bookorbit_32,
-                                                           &icon_lyra_transfer_32, &icon_lyra_settings_32};
+  static constexpr const freeink::Icon* ICONS[MAX_TABS] = {
+      &icon_folder_32, &icon_landmark_32, &icon_lyra_library_32, &icon_bookorbit_32,
+#if (defined(FREEINK_DEVICE_X4PRO) && FREEINK_DEVICE_X4PRO) || defined(SIMULATOR_DEVICE_X4_PRO)
+      &icon_file_text_32,
+#endif
+      &icon_lyra_transfer_32, &icon_lyra_settings_32};
   const int count = tabCount(hasOpds, hasBookOrbit);
   for (int i = 0; i < count; ++i) {
     auto& tab = tabItems[i];
