@@ -840,7 +840,15 @@ void HomeActivity::onEnter() {
   Activity::onEnter();
 
   hasOpdsServers = OPDS_STORE.hasServers();
-  if (UITheme::hasCoverGridHome()) {
+  // The X4 Pro's touch panel is best served by the app-launcher home even
+  // when a legacy theme is selected. Other boards retain their theme-specific
+  // homes, where the smaller screen and button-only navigation are a better fit.
+  const bool useAppLauncherHome = UITheme::hasCoverGridHome()
+#if (defined(FREEINK_DEVICE_X4PRO) && FREEINK_DEVICE_X4PRO) || defined(SIMULATOR_DEVICE_X4_PRO)
+                                || mappedInput.hasTouchHardware()
+#endif
+      ;
+  if (useAppLauncherHome) {
     coverGridUi = makeUniqueNoThrow<CoverGridHomeUi>(renderer);
     if (!coverGridUi) LOG_ERR("HOME", "Cannot allocate cover grid UI; using standard Home");
   }
@@ -1436,19 +1444,34 @@ void HomeActivity::loop() {
 
     const int bookCount = static_cast<int>(recentBooks.size());
     const int tabCount = CoverGridHomeUi::tabCount(hasOpdsServers, BOOKORBIT_STORE.hasCredentials());
-    const auto cycleBand = [this](const int base, const int count, const int dir) {
-      if (count <= 0) return;
-      const int current = selectorIndex - base;
-      selectorIndex =
-          base + (current < 0 || current >= count ? (dir > 0 ? 0 : count - 1) : (current + count + dir) % count);
+    // Physical controls mirror the launcher grid: up/down change launcher
+    // rows; left/right change applications. From the featured current book,
+    // Down enters the first application.
+    const auto moveLauncher = [this, bookCount, tabCount](const int delta) {
+      if (tabCount <= 0) return;
+      int appIndex = selectorIndex - bookCount;
+      if (appIndex < 0 || appIndex >= tabCount) appIndex = 0;
+      else appIndex = (appIndex + tabCount + delta) % tabCount;
+      selectorIndex = bookCount + appIndex;
       requestUpdate();
     };
-    buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Up}, [&] { cycleBand(0, bookCount, -1); });
-    buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Down}, [&] { cycleBand(0, bookCount, 1); });
-    buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Left},
-                                         [&] { cycleBand(bookCount, tabCount, -1); });
-    buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Right},
-                                         [&] { cycleBand(bookCount, tabCount, 1); });
+    buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Up}, [this, bookCount, moveLauncher] {
+      if (selectorIndex >= bookCount && selectorIndex - bookCount < 4) {
+        selectorIndex = 0;
+        requestUpdate();
+      } else {
+        moveLauncher(-4);
+      }
+    });
+    buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Down}, [this, bookCount, moveLauncher] {
+      if (selectorIndex < bookCount) {
+        moveLauncher(0);
+      } else {
+        moveLauncher(4);
+      }
+    });
+    buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Left}, [moveLauncher] { moveLauncher(-1); });
+    buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Right}, [moveLauncher] { moveLauncher(1); });
     return;
   }
 

@@ -15,9 +15,10 @@ class CoverGridHomeUi final : public UiAppHost<16, 1> {
  public:
   using UiScreen = UiAppHost<16, 1>::Screen;
   static constexpr int THUMB_HEIGHT = 400;
-  static constexpr int GRID_COLUMNS = 3;
-  static constexpr int GRID_ROWS = 2;
-  static constexpr int MAX_BOOKS = 1 + GRID_COLUMNS * GRID_ROWS;
+  // The X4 launcher keeps the active book prominent and uses the remaining
+  // home space for applications. More recent books remain available through
+  // Library/BookOrbit rather than competing with the launcher tiles.
+  static constexpr int MAX_BOOKS = 1;
   static_assert(MAX_BOOKS <= HomeCoverCache::MAX_COVERS);
   // The tab bar's entries, in display order. OPDS and this fork's BookOrbit catalog only
   // take a slot once they are set up, so positions are resolved through the helpers
@@ -59,9 +60,7 @@ class CoverGridHomeUi final : public UiAppHost<16, 1> {
   void drawHeaderBand();
   void drawEmpty(UiScreen& screen);
   void drawCurrent(UiScreen& screen, freeink::ui::Rect rect, int coverRowHeight);
-  void drawGrid(UiScreen& screen);
-  freeink::ui::Rect layoutGrid(freeink::ui::Rect rect);
-  void drawTabs(UiScreen& screen, freeink::ui::Rect rect);
+  void drawLauncher(UiScreen& screen);
   bool paintFramedCover(freeink::ui::DrawTarget& target, freeink::ui::Rect rect, size_t index);
   void refreshCoverPath(size_t index);
   void noteThumbSize(size_t index, int slotWidth, int slotHeight);
@@ -81,8 +80,5 @@ class CoverGridHomeUi final : public UiAppHost<16, 1> {
   char progressText[12]{};
   // Component styles and interaction tables stay off the render task's stack.
   freeink::ui::BookCardProps card;
-  freeink::ui::CoverGridProps grid;
-  freeink::ui::Rect gridBounds{};
-  freeink::ui::TabBarProps tabs;
   std::array<freeink::ui::TabItem, MAX_TABS> tabItems;
 };

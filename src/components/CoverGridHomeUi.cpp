@@ -17,6 +17,8 @@ namespace fui = freeink::ui;
 namespace {
 constexpr fui::ActionId SELECT = 1;
 constexpr int16_t COVER_CELL_INSET = 6;
+constexpr int LAUNCHER_COLUMNS = 4;
+constexpr int LAUNCHER_GAP = 10;
 }  // namespace
 
 CoverGridHomeUi::CoverGridHomeUi(GfxRenderer& renderer)
@@ -129,28 +131,21 @@ void CoverGridHomeUi::draw(UiScreen& screen) {
   screen.insetContent(fui::Insets{topInset, hInset, theme.spaceSm, hInset});
   const bool landscape = renderer.getScreenWidth() > renderer.getScreenHeight();
   screen.takeTop(UITheme::getInstance().getMetrics().batteryBarHeight, theme.spaceSm);
-  const int16_t tabGap = BoardConfig::hasTouch() ? theme.spaceSm : static_cast<int16_t>(4);
-  auto tabRect = screen.takeBottom(72, tabGap);
   if (books->empty()) {
-    drawTabs(screen, tabRect.inset(fui::Insets{0, COVER_CELL_INSET, 0, COVER_CELL_INSET}));
+    drawLauncher(screen);
     drawEmpty(screen);
     drawHeaderBand();
     return;
   }
   const fui::Rect body = screen.body();
-  const int rowGap = std::max<int>(4, body.width / 100);
-  grid.gap = grid.rowGap = rowGap;
-  const int coverRowHeight = std::max(1, (body.height - theme.spaceSm - rowGap) / 3);
+  const int coverRowHeight = std::max(1, body.height / 2);
   const int16_t featuredHeight = std::min<int>(
-      body.height, std::max<int>(coverRowHeight, screen.target().lineHeight(theme.bodyText.font) * (landscape ? 1 : 2) +
-                                                     screen.target().lineHeight(theme.smallText.font) * 2 + 32));
+      body.height / 2, std::max<int>(coverRowHeight / 2,
+                                     screen.target().lineHeight(theme.bodyText.font) * (landscape ? 1 : 2) +
+                                         screen.target().lineHeight(theme.smallText.font) * 2 + 32));
   const auto featuredRect = screen.takeTop(featuredHeight, theme.spaceSm);
-  const int gridRowHeight = std::max(1, (screen.body().height - rowGap) / GRID_ROWS);
-  drawCurrent(screen, featuredRect, std::min(coverRowHeight, gridRowHeight));
-  drawGrid(screen);
-  tabRect.x = gridBounds.x + grid.cellInset.left;
-  tabRect.width = gridBounds.width - grid.cellInset.left - grid.cellInset.right;
-  drawTabs(screen, tabRect);
+  drawCurrent(screen, featuredRect, coverRowHeight);
+  drawLauncher(screen);
   drawHeaderBand();
 }
 
@@ -204,13 +199,10 @@ void CoverGridHomeUi::drawCurrent(UiScreen& screen, fui::Rect rect, const int co
   card.progressHeight = 6;
   card.padding = fui::Insets{6, 6, 6, 6};
   card.gap = theme.spaceLg + theme.spaceSm;
-  const int maxCoverWidth = rect.width / GRID_COLUMNS - 2 * COVER_CELL_INSET;
+  const int maxCoverWidth = rect.width / 4 - 2 * COVER_CELL_INSET;
   card.coverSize.height = std::max(1, std::min(std::min<int>(rect.height, coverRowHeight) - 12, maxCoverWidth * 3 / 2));
   card.coverSize.width = std::max(1, card.coverSize.height * 2 / 3);
   noteThumbSize(0, card.coverSize.width, card.coverSize.height);
-  gridBounds = layoutGrid(screen.body());
-  rect.x = gridBounds.x;
-  rect.width = gridBounds.width;
   card.coverPainterUserData = this;
   card.coverPainter = [](fui::DrawTarget& target, fui::Rect cover, const fui::BookCardProps&, void* user) {
     return static_cast<CoverGridHomeUi*>(user)->paintFramedCover(target, cover, 0);
@@ -225,40 +217,7 @@ void CoverGridHomeUi::drawCurrent(UiScreen& screen, fui::Rect rect, const int co
   }
 }
 
-fui::Rect CoverGridHomeUi::layoutGrid(fui::Rect rect) {
-  grid.cellInset = fui::Insets{COVER_CELL_INSET, COVER_CELL_INSET, COVER_CELL_INSET, COVER_CELL_INSET};
-  grid.coverSize = card.coverSize;
-  grid.rowHeight = grid.coverSize.height + 12;
-  rect.height = GRID_ROWS * grid.rowHeight + (GRID_ROWS - 1) * grid.rowGap;
-  return rect;
-}
-
-void CoverGridHomeUi::drawGrid(UiScreen& screen) {
-  const auto rect = gridBounds;
-  grid.count = books->size() > 1 ? books->size() - 1 : 0;
-  grid.columns = GRID_COLUMNS;
-  grid.columnLayout = fui::CoverGridColumnLayout::SpaceBetween;
-  grid.action = SELECT;
-  grid.inputMask = fui::InputTouch;
-  grid.selectedIndex = selected > 0 && selected < static_cast<int>(books->size()) ? selected - 1 : -1;
-  grid.selectionIndicator = fui::CoverGridSelectionIndicator::CoverFrame;
-  grid.selectedCoverFrameGap = 6;
-  grid.selectedCoverFrameWidth = 8;
-  grid.cellStyles = card.styles;
-  grid.labelHeight = 0;
-  grid.labelGap = 0;
-  for (size_t i = 1; i < thumbHeights.size(); ++i) noteThumbSize(i, grid.coverSize.width, grid.coverSize.height);
-  grid.scrollIndicator = false;
-  grid.itemProvider = [](uint16_t index, void*) { return fui::coverGridItem(nullptr, index + 1); };
-  grid.coverPainterUserData = this;
-  grid.coverPainter = [](fui::DrawTarget& target, fui::Rect cover, const fui::CoverGridItem&, uint16_t index,
-                         void* user) {
-    return static_cast<CoverGridHomeUi*>(user)->paintFramedCover(target, cover, index + 1);
-  };
-  fui::coverGrid(screen.frame(), rect, grid);
-}
-
-void CoverGridHomeUi::drawTabs(UiScreen& screen, fui::Rect rect) {
+void CoverGridHomeUi::drawLauncher(UiScreen& screen) {
   // Indexed by Tab.
   static constexpr const freeink::Icon* ICONS[MAX_TABS] = {
       &icon_folder_32, &icon_landmark_32, &icon_lyra_library_32, &icon_bookorbit_32,
@@ -266,33 +225,42 @@ void CoverGridHomeUi::drawTabs(UiScreen& screen, fui::Rect rect) {
       &icon_file_text_32,
 #endif
       &icon_lyra_transfer_32, &icon_lyra_settings_32};
+  static constexpr StrId LABELS[MAX_TABS] = {
+      StrId::STR_BROWSE_FILES, StrId::STR_LIBRARY, StrId::STR_OPDS_BROWSER, StrId::STR_BOOKORBIT,
+#if (defined(FREEINK_DEVICE_X4PRO) && FREEINK_DEVICE_X4PRO) || defined(SIMULATOR_DEVICE_X4_PRO)
+      StrId::STR_NOTEBOOK,
+#endif
+      StrId::STR_FILE_TRANSFER, StrId::STR_SETTINGS_TITLE};
   const int count = tabCount(hasOpds, hasBookOrbit);
+  if (count <= 0) return;
+  const fui::Rect area = screen.body();
+  const int rows = (count + LAUNCHER_COLUMNS - 1) / LAUNCHER_COLUMNS;
+  const int cellWidth = std::max(1, (area.width - (LAUNCHER_COLUMNS - 1) * LAUNCHER_GAP) / LAUNCHER_COLUMNS);
+  const int cellHeight = std::max(1, (area.height - (rows - 1) * LAUNCHER_GAP) / rows);
+  const int tileSide = std::max(1, std::min(cellWidth, cellHeight - 22));
   for (int i = 0; i < count; ++i) {
-    auto& tab = tabItems[i];
-    tab.value = books->size() + i;
-    tab.selected = selected == tab.value;
-    tab.label = nullptr;
+    const Tab shown = tabAt(i, hasOpds, hasBookOrbit);
+    if (shown == Tab::Count) continue;
+    const int column = i % LAUNCHER_COLUMNS;
+    const int row = i / LAUNCHER_COLUMNS;
+    const int cellX = area.x + column * (cellWidth + LAUNCHER_GAP);
+    const int cellY = area.y + row * (cellHeight + LAUNCHER_GAP);
+    const int x = cellX + (cellWidth - tileSide) / 2;
+    const int y = cellY + std::max(0, (cellHeight - tileSide - 16) / 2);
+    const bool selectedTile = selected == static_cast<int>(books->size()) + i;
+    if (selectedTile) renderer.fillRectDither(x, y, tileSide, tileSide, Color::LightGray);
+    renderer.drawRect(x, y, tileSide, tileSide, true);
+    constexpr int iconSize = 32;
+    drawLucideIcon(renderer, *ICONS[static_cast<int>(shown)], x + (tileSide - iconSize) / 2,
+                   y + (tileSide - iconSize) / 2);
+    const char* label = I18n::getInstance().get(LABELS[static_cast<int>(shown)]);
+    const std::string clipped = renderer.truncatedText(UI_10_FONT_ID, label, cellWidth - 4);
+    renderer.drawText(UI_10_FONT_ID, cellX + (cellWidth - renderer.getTextWidth(UI_10_FONT_ID, clipped.c_str())) / 2,
+                      y + tileSide + 3, clipped.c_str());
+    screen.frame().hit(fui::Rect{static_cast<int16_t>(x), static_cast<int16_t>(y), static_cast<int16_t>(tileSide),
+                                 static_cast<int16_t>(tileSide + 20)},
+                       SELECT, static_cast<int16_t>(books->size() + i), fui::InputTouch);
   }
-  tabs.tabs = tabItems.data();
-  tabs.count = count;
-  tabs.layout = fui::TabBarLayout::SpaceBetween;
-  tabs.action = SELECT;
-  tabs.inputMask = fui::InputTouch;
-  tabs.iconSize = 32;
-  tabs.iconPainterUserData = this;
-  tabs.iconPainter = [](fui::DrawTarget&, fui::Rect iconRect, const fui::TabItem& tab, uint8_t, void* user) {
-    const auto& self = *static_cast<CoverGridHomeUi*>(user);
-    const int position = tab.value - static_cast<int>(self.books->size());
-    const Tab shown = tabAt(position, self.hasOpds, self.hasBookOrbit);
-    if (shown == Tab::Count) return false;
-    drawLucideIcon(self.renderer, *ICONS[static_cast<int>(shown)], iconRect.x, iconRect.y);
-    return true;
-  };
-  tabs.tabStyles.normal.background = fui::Paint::solid(fui::Color::White);
-  tabs.tabStyles.selected.background = fui::Paint::solid(fui::Color::White);
-  tabs.selectedUnderline = 2;
-  tabs.distributedSlotWidth = 0;
-  fui::tabBar(screen.frame(), rect, tabs);
 }
 
 bool CoverGridHomeUi::paintFramedCover(fui::DrawTarget& target, fui::Rect rect, size_t index) {
