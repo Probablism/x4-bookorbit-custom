@@ -3036,11 +3036,8 @@ void EpubReaderActivity::loop() {
   }
 
 #if CROSSINK_APP_CAP_TOUCH
-  refreshMarginStrokesForCurrentPage();
-  if (handleMarginStrokeTouch()) {
-    backgroundBuildYieldForInput.store(true, std::memory_order_relaxed);
-    return;
-  }
+  // Freehand margin sketching is disabled on the X4 Pro: its touch sampling
+  // cannot make dependable strokes. Existing saved stroke files remain intact.
   if (handlePinchFontResize()) {
     // A live two-finger gesture is reader input, so background indexing yields
     // just as it does for a page turn or normal tap.
@@ -8065,7 +8062,6 @@ bool EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int fo
 
   const auto finalizeBufferComposition = [&]() {
     drawClippingHighlights(*page, fontId, orientedMarginTop, orientedMarginLeft);
-    drawMarginStrokes();
     drawPublisherPageMarkers(renderer, *page, orientedMarginTop, contentBottom, foregroundBlack);
 #if CROSSINK_APP_CAP_TOUCH
     if (activeFootnotePreview) {

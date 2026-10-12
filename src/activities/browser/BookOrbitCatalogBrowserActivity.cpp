@@ -1471,16 +1471,22 @@ void BookOrbitCatalogBrowserActivity::renderBookDetail() {
     y += renderer.getLineHeight(UI_10_FONT_ID) + 8;
   }
   if (!detail.seriesName.empty()) {
-    std::string series = detail.seriesName;
+    std::string series = "SERIES  " + detail.seriesName;
     if (detail.seriesIndex > 0) series += " #" + std::to_string(detail.seriesIndex);
     renderer.drawText(UI_10_FONT_ID, textLeft, y, series.c_str());
     y += renderer.getLineHeight(UI_10_FONT_ID) + 5;
   }
-  std::string facts;
-  if (detail.publishedYear > 0) facts = std::to_string(detail.publishedYear);
-  if (detail.pageCount > 0) facts += (facts.empty() ? "" : " · ") + std::to_string(detail.pageCount) + " pages";
-  if (!detail.publisher.empty()) facts += (facts.empty() ? "" : " · ") + detail.publisher;
-  if (!facts.empty()) renderer.drawText(UI_10_FONT_ID, textLeft, y, facts.c_str());
+  if (detail.publishedYear > 0 || detail.pageCount > 0) {
+    std::string facts = "DETAILS  ";
+    if (detail.publishedYear > 0) facts += std::to_string(detail.publishedYear);
+    if (detail.pageCount > 0) facts += (facts.size() > 9 ? " · " : "") + std::to_string(detail.pageCount) + " pages";
+    renderer.drawText(UI_10_FONT_ID, textLeft, y, facts.c_str());
+    y += renderer.getLineHeight(UI_10_FONT_ID) + 5;
+  }
+  if (!detail.publisher.empty()) {
+    const std::string publisher = renderer.truncatedText(UI_10_FONT_ID, ("PUBLISHER  " + detail.publisher).c_str(), textWidth);
+    renderer.drawText(UI_10_FONT_ID, textLeft, y, publisher.c_str());
+  }
 
   int bodyY = top + coverHeight + 16;
   if (!detail.genres.empty()) {

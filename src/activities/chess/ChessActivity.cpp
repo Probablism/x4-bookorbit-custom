@@ -26,6 +26,36 @@ char pieceLetter(const uint8_t piece) {
   const uint8_t type = chess::pieceType(piece);
   return type == chess::Empty || type > chess::King ? ' ' : letters[type];
 }
+
+void drawPiece(GfxRenderer& renderer, const uint8_t piece, const int x, const int y, const int size) {
+  static constexpr const char* shapes[][8] = {
+      {"........", "........", "........", "........", "........", "........", "........", "........"},
+      {"...XX...", "..XXXX..", ".XXXXXX.", "...XX...", "...XX...", "..XXXX..", ".XXXXXX.", "........"},
+      {"..XXX...", ".XXXXX..", ".XX.XX..", ".XXXXX..", "...XXX..", "..XXXXX.", ".XXXXXXX", "........"},
+      {"...XX...", "..XXXX..", ".XX..XX.", ".XXXXXX.", "..XXXX..", ".XXXXXX.", ".XXXXXXX", "........"},
+      {".XXXXXX.", ".XX..XX.", ".XX..XX.", ".XXXXXX.", "...XX...", ".XXXXXX.", ".XXXXXXX", "........"},
+      {"..XXXX..", ".XXXXXX.", ".XX.XX..", ".XXXXXX.", "...XX...", ".XXXXXX.", ".XXXXXXX", "........"},
+      {"...XX...", "...XX...", ".XXXXXX.", "..XXXX..", "...XX...", ".XXXXXX.", ".XXXXXXX", "........"},
+  };
+  const uint8_t type = chess::pieceType(piece);
+  if (type == chess::Empty || type > chess::King) return;
+  const int pixel = std::max(2, size / 9);
+  const int glyphSize = pixel * 8;
+  const int left = x + (size - glyphSize) / 2;
+  const int top = y + (size - glyphSize) / 2;
+  const bool black = chess::isBlack(piece);
+  for (int row = 0; row < 8; ++row) {
+    for (int col = 0; col < 8; ++col) {
+      if (shapes[type][row][col] != 'X') continue;
+      // White pieces are deliberately hollow: black pieces are solid. This
+      // remains obvious even on dithered board squares.
+      const bool edge = row == 0 || row == 7 || col == 0 || col == 7 || shapes[type][row - (row > 0)][col] == '.' ||
+                        shapes[type][row + (row < 7)][col] == '.' || shapes[type][row][col - (col > 0)] == '.' ||
+                        shapes[type][row][col + (col < 7)] == '.';
+      if (black || edge) renderer.fillRect(left + col * pixel, top + row * pixel, pixel, pixel, true);
+    }
+  }
+}
 }  // namespace
 
 ChessActivity::ChessActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
@@ -226,22 +256,16 @@ void ChessActivity::drawBoard() {
       if (dark) renderer.fillRectDither(x, y, squareSize, squareSize, Color::LightGray);
       if (square == selectedSquare) renderer.drawRect(x + 2, y + 2, squareSize - 4, squareSize - 4, true);
       const uint8_t piece = position.squares[square];
-      const char glyph[] = {pieceLetter(piece), '\0'};
-      if (glyph[0] == ' ') continue;
+      if (pieceLetter(piece) == ' ') continue;
       const int pieceSize = std::max(22, squareSize - 18);
       const int pieceX = x + (squareSize - pieceSize) / 2;
       const int pieceY = y + (squareSize - pieceSize) / 2;
-      const bool black = chess::isBlack(piece);
-      renderer.fillRoundedRect(pieceX, pieceY, pieceSize, pieceSize, 4, black ? Color::Black : Color::White);
-      renderer.drawRoundedRect(pieceX, pieceY, pieceSize, pieceSize, 1, 4, true);
-      const int textX = x + (squareSize - renderer.getTextWidth(BITTER_16_FONT_ID, glyph)) / 2;
-      renderer.drawText(BITTER_16_FONT_ID, textX, y + (squareSize - renderer.getLineHeight(BITTER_16_FONT_ID)) / 2,
-                        glyph, !black, EpdFontFamily::BOLD);
+      drawPiece(renderer, piece, pieceX, pieceY, pieceSize);
     }
   }
   renderer.drawRect(left, top, boardSize, boardSize, true);
   renderer.drawCenteredText(UI_10_FONT_ID, top + boardSize + 14, status());
-  renderer.drawCenteredText(UI_10_FONT_ID, top + boardSize + 30, "White outlined · Black solid · Tap below for games");
+  renderer.drawCenteredText(UI_10_FONT_ID, top + boardSize + 30, "Hollow white · solid black · Tap below for games");
   renderer.displayBuffer();
 }
 
