@@ -857,6 +857,7 @@ bool BookOrbitCatalogBrowserActivity::preventAutoSleep() {
     case BrowserState::SEARCH_INPUT:
       return true;
     case BrowserState::BROWSING:
+    case BrowserState::DETAIL:
     case BrowserState::ERROR:
       return false;
   }
@@ -925,13 +926,25 @@ void BookOrbitCatalogBrowserActivity::activateSelected() {
       launchSearch();
       break;
     case EntryType::BOOK:
-      if (entry.onDevice) {
-        openLocalBook(entry.path);
-      } else {
-        downloadBook(entry.bookId, entry.title);
-      }
+      showBookDetail(entry);
       break;
   }
+}
+
+void BookOrbitCatalogBrowserActivity::showBookDetail(const Entry& entry) {
+  detailEntry = entry;
+  showLoadingBeforeFetch();
+  if (!BookOrbitCatalogClient::fetchBookDetail(entry.bookId, detail)) {
+    state = BrowserState::ERROR;
+    errorMessage = BookOrbitCatalogClient::lastFetchBadResponse ? tr(STR_BOOKORBIT_CATALOG_BAD_RESPONSE)
+                                                                : tr(STR_BOOKORBIT_CATALOG_ERROR);
+    requestUpdate();
+    return;
+  }
+  if (detail.title.empty()) detail.title = entry.title;
+  if (detail.author.empty()) detail.author = entry.subtitle;
+  state = BrowserState::DETAIL;
+  requestUpdate();
 }
 
 void BookOrbitCatalogBrowserActivity::openLocalBook(const std::string& path) {
@@ -1075,6 +1088,24 @@ void BookOrbitCatalogBrowserActivity::loop() {
   }
 
   if (state == BrowserState::DOWNLOADING) return;
+
+  if (state == BrowserState::DETAIL) {
+    if (backRequested) {
+      state = BrowserState::BROWSING;
+      requestUpdate();
+      return;
+    }
+    int x = 0, y = 0;
+    const bool confirmed = mappedInput.wasReleased(MappedInputManager::Button::Confirm);
+    const bool tapped = mappedInput.wasScreenTapped(x, y);
+    if (confirmed || (tapped && y >= renderer.getScreenHeight() - 86)) {
+      if (detailEntry.onDevice)
+        openLocalBook(detailEntry.path);
+      else
+        downloadBook(detail.id, detail.title);
+    }
+    return;
+  }
 
   if (state == BrowserState::BROWSING) {
     // Populate the current visual page progressively. Cover transfer and JPEG
@@ -1401,7 +1432,89 @@ void BookOrbitCatalogBrowserActivity::buildGenreGrid(UiApp::ScreenType& screen) 
   }
 }
 
+void BookOrbitCatalogBrowserActivity::renderBookDetail() {
+  renderer.clearScreen();
+  const int pageWidth = renderer.getScreenWidth();
+  const int pageHeight = renderer.getScreenHeight();
+  if (mappedInput.hasTouchHardware())
+    TouchHeaderBackButton::drawCompact(renderer, "BOOK DETAILS");
+  else
+    CompactHeader::drawTitle(renderer, "BOOK DETAILS");
+
+  constexpr int coverWidth = 112;
+  constexpr int coverHeight = 168;
+  constexpr int left = 34;
+  constexpr int top = 58;
+  bool coverDrawn = false;
+  if (!detailEntry.coverPath.empty() && Storage.exists(detailEntry.coverPath.c_str())) {
+    FsFile cover;
+    if (Storage.openFileForRead("BookOrbit", detailEntry.coverPath, cover)) {
+      Bitmap bitmap(cover);
+      if (bitmap.parseHeaders() == BmpReaderError::Ok)
+        coverDrawn = renderer.drawBitmap(bitmap, left, top, coverWidth, coverHeight);
+      cover.close();
+    }
+  }
+  if (!coverDrawn) renderer.fillRect(left, top, coverWidth, coverHeight, Color::White);
+  renderer.drawRect(left, top, coverWidth, coverHeight, true);
+
+  const int textLeft = left + coverWidth + 22;
+  const int textWidth = pageWidth - textLeft - 30;
+  int y = top;
+  const auto titleLines = renderer.wrappedText(UI_12_FONT_ID, detail.title.c_str(), textWidth, 3);
+  for (const auto& line : titleLines) {
+    renderer.drawText(UI_12_FONT_ID, textLeft, y, line.c_str(), true, EpdFontFamily::BOLD);
+    y += renderer.getLineHeight(UI_12_FONT_ID) + 2;
+  }
+  if (!detail.author.empty()) {
+    renderer.drawText(UI_10_FONT_ID, textLeft, y + 4, detail.author.c_str());
+    y += renderer.getLineHeight(UI_10_FONT_ID) + 8;
+  }
+  if (!detail.seriesName.empty()) {
+    std::string series = detail.seriesName;
+    if (detail.seriesIndex > 0) series += " #" + std::to_string(detail.seriesIndex);
+    renderer.drawText(UI_10_FONT_ID, textLeft, y, series.c_str());
+    y += renderer.getLineHeight(UI_10_FONT_ID) + 5;
+  }
+  std::string facts;
+  if (detail.publishedYear > 0) facts = std::to_string(detail.publishedYear);
+  if (detail.pageCount > 0) facts += (facts.empty() ? "" : " · ") + std::to_string(detail.pageCount) + " pages";
+  if (!detail.publisher.empty()) facts += (facts.empty() ? "" : " · ") + detail.publisher;
+  if (!facts.empty()) renderer.drawText(UI_10_FONT_ID, textLeft, y, facts.c_str());
+
+  int bodyY = top + coverHeight + 16;
+  if (!detail.genres.empty()) {
+    std::string genres = "Genres: ";
+    for (size_t i = 0; i < detail.genres.size() && i < 3; ++i) {
+      if (i > 0) genres += " · ";
+      genres += detail.genres[i];
+    }
+    const std::string clipped = renderer.truncatedText(UI_10_FONT_ID, genres.c_str(), pageWidth - 68);
+    renderer.drawText(UI_10_FONT_ID, 34, bodyY, clipped.c_str());
+    bodyY += renderer.getLineHeight(UI_10_FONT_ID) + 8;
+  }
+  if (!detail.description.empty()) {
+    const auto lines = renderer.wrappedText(UI_10_FONT_ID, detail.description.c_str(), pageWidth - 68, 4);
+    for (const auto& line : lines) {
+      renderer.drawText(UI_10_FONT_ID, 34, bodyY, line.c_str());
+      bodyY += renderer.getLineHeight(UI_10_FONT_ID) + 2;
+    }
+  }
+
+  const int actionY = pageHeight - 76;
+  renderer.fillRoundedRect(34, actionY, pageWidth - 68, 38, 5, Color::Black);
+  const char* action = detailEntry.onDevice ? tr(STR_OPEN) : tr(STR_DOWNLOAD);
+  const int actionX = (pageWidth - renderer.getTextWidth(UI_12_FONT_ID, action)) / 2;
+  renderer.drawText(UI_12_FONT_ID, actionX, actionY + 11, action, false, EpdFontFamily::BOLD);
+  renderer.drawCenteredText(UI_10_FONT_ID, pageHeight - 25, "Back returns to catalog");
+  renderer.displayBuffer();
+}
+
 void BookOrbitCatalogBrowserActivity::render(RenderLock&&) {
+  if (state == BrowserState::DETAIL) {
+    renderBookDetail();
+    return;
+  }
   renderer.clearScreen();
 
   const auto pageWidth = renderer.getScreenWidth();

@@ -23,7 +23,7 @@
  */
 class BookOrbitCatalogBrowserActivity final : public Activity {
  public:
-  enum class BrowserState { CHECK_WIFI, WIFI_SELECTION, LOADING, BROWSING, DOWNLOADING, ERROR, SEARCH_INPUT };
+  enum class BrowserState { CHECK_WIFI, WIFI_SELECTION, LOADING, BROWSING, DETAIL, DOWNLOADING, ERROR, SEARCH_INPUT };
   enum class EntryType { SECTION, FACET_SECTION, FACET, LOCAL_SECTION, LOCAL_BOOK, SEARCH, STATS, CHESS, BOOK };
   // Which listing the BROWSING state currently shows; drives Back navigation.
   enum class NavLevel { Root, FacetList, Books };
@@ -71,6 +71,11 @@ class BookOrbitCatalogBrowserActivity final : public Activity {
   size_t downloadTotal = 0;
   bool goHomeAfterCancel = false;
 
+  // The detail view keeps a copy of its source entry so it remains valid while
+  // a download frees the paged book listing for TLS heap headroom.
+  BookOrbitBookDetail detail;
+  Entry detailEntry{EntryType::BOOK, ""};
+
   // Current book-list context, used to page and to return to the same list after a download.
   BookOrbitBookQuery listQuery;
   std::string listTitle;
@@ -108,6 +113,8 @@ class BookOrbitCatalogBrowserActivity final : public Activity {
   void buildDiscoverHome(UiApp::ScreenType& screen);
   void buildCoverGrid(UiApp::ScreenType& screen);
   void buildGenreGrid(UiApp::ScreenType& screen);
+  void showBookDetail(const Entry& entry);
+  void renderBookDetail();
   bool cacheOneVisibleCover();
   void activateSelected();
   void openLocalBook(const std::string& path);

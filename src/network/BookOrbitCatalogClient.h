@@ -72,6 +72,13 @@ struct BookOrbitBookDetail {
   int64_t id = 0;
   std::string title;
   std::string author;
+  std::string description;
+  std::string seriesName;
+  std::string publisher;
+  int seriesIndex = 0;
+  int publishedYear = 0;
+  int pageCount = 0;
+  std::vector<std::string> genres;
   std::vector<BookOrbitCatalogFile> files;
 };
 

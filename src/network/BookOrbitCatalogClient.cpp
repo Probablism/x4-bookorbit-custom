@@ -379,6 +379,13 @@ bool BookOrbitCatalogClient::fetchBookDetail(const int64_t bookId, BookOrbitBook
   filter["id"] = true;
   filter["title"] = true;
   filter["authors"] = true;
+  filter["description"] = true;
+  filter["seriesName"] = true;
+  filter["seriesIndex"] = true;
+  filter["publisher"] = true;
+  filter["publishedYear"] = true;
+  filter["pageCount"] = true;
+  filter["genres"][0] = true;
   filter["files"][0]["id"] = true;
   filter["files"][0]["format"] = true;
   filter["files"][0]["sizeBytes"] = true;
@@ -391,6 +398,16 @@ bool BookOrbitCatalogClient::fetchBookDetail(const int64_t bookId, BookOrbitBook
   JsonArrayConst authors = doc["authors"].as<JsonArrayConst>();
   if (!authors.isNull() && authors.size() > 0) {
     outDetail.author = std::string(authors[0].as<const char*>() ? authors[0].as<const char*>() : "");
+  }
+  outDetail.description = std::string(doc["description"] | "");
+  outDetail.seriesName = std::string(doc["seriesName"] | "");
+  outDetail.seriesIndex = doc["seriesIndex"] | 0;
+  outDetail.publisher = std::string(doc["publisher"] | "");
+  outDetail.publishedYear = doc["publishedYear"] | 0;
+  outDetail.pageCount = doc["pageCount"] | 0;
+  for (JsonVariantConst genre : doc["genres"].as<JsonArrayConst>()) {
+    const char* value = genre.as<const char*>();
+    if (value != nullptr && *value != '\0') outDetail.genres.emplace_back(value);
   }
 
   outDetail.files.reserve(doc["files"].size());
