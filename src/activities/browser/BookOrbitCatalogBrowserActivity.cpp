@@ -29,6 +29,8 @@
 #include "activities/home/FileBrowserActionActivity.h"
 #include "activities/network/WifiSelectionActivity.h"
 #include "activities/reader/BookReadingStats.h"
+#include "activities/reader/BookStatsActivity.h"
+#include "activities/reader/GlobalReadingStats.h"
 #include "activities/util/ConfirmationActivity.h"
 #include "activities/util/KeyboardEntryActivity.h"
 #include "components/CompactHeader.h"
@@ -71,7 +73,7 @@ constexpr int CATALOG_GENRE_PAGE_SIZE = CATALOG_GENRE_COLUMNS * CATALOG_GENRE_RO
 constexpr int CATALOG_GENRE_GAP = 10;
 constexpr int CATALOG_GENRE_LABEL_HEIGHT = 34;
 constexpr int CATALOG_HOME_COLUMNS = 3;
-constexpr int CATALOG_HOME_ROWS = 2;
+constexpr int CATALOG_HOME_ROWS = 3;
 constexpr int CATALOG_HOME_PAGE_SIZE = CATALOG_HOME_COLUMNS * CATALOG_HOME_ROWS;
 constexpr int CATALOG_HOME_GAP = 12;
 
@@ -319,6 +321,10 @@ bool BookOrbitCatalogBrowserActivity::loadRoot(const bool allowNetwork) {
   search.type = EntryType::SEARCH;
   search.title = tr(STR_SEARCH);
   entries.push_back(std::move(search));
+  Entry stats;
+  stats.type = EntryType::STATS;
+  stats.title = tr(STR_READING_STATS);
+  entries.push_back(std::move(stats));
 
   selectorIndex = 0;
   state = entries.empty() ? BrowserState::ERROR : BrowserState::BROWSING;
@@ -921,6 +927,14 @@ void BookOrbitCatalogBrowserActivity::activateSelected() {
     case EntryType::SEARCH:
       launchSearch();
       break;
+    case EntryType::STATS: {
+      const GlobalReadingStats globalStats = GlobalReadingStats::load();
+      startActivityForResult(
+          std::make_unique<BookStatsActivity>(renderer, mappedInput, tr(STR_READING_STATS), "", BookReadingStats{}, -1.0f,
+                                              false, 0, globalStats),
+          [this](const ActivityResult&) { requestUpdate(); });
+      break;
+    }
     case EntryType::BOOK:
       if (entry.onDevice) {
         openLocalBook(entry.path);
@@ -1369,8 +1383,14 @@ void BookOrbitCatalogBrowserActivity::buildGenreGrid(UiApp::ScreenType& screen) 
   const int cellWidth = std::max(1, (area.width - (CATALOG_GENRE_COLUMNS - 1) * CATALOG_GENRE_GAP) / CATALOG_GENRE_COLUMNS);
   const int cellHeight = std::max(1, (area.height - (CATALOG_GENRE_ROWS - 1) * CATALOG_GENRE_GAP) / CATALOG_GENRE_ROWS);
   const int mosaicHeight = std::max(1, cellHeight - CATALOG_GENRE_LABEL_HEIGHT - 8);
-  const int thumbWidth = std::max(1, (cellWidth - 10) / 2);
   const int thumbHeight = std::max(1, (mosaicHeight - 8) / 2);
+  // Covers are portrait assets. Preserve that aspect ratio and center the 2x2
+  // mosaic, so a missing image is a small outlined placeholder rather than a
+  // large, visually heavy black block.
+  const int thumbWidth = std::max(1, std::min((cellWidth - 10) / 2,
+                                              thumbHeight * BookOrbitCoverCache::THUMB_WIDTH /
+                                                  BookOrbitCoverCache::THUMB_HEIGHT));
+  const int mosaicWidth = thumbWidth * 2 + 4;
   visibleRows = CATALOG_GENRE_PAGE_SIZE;
   topIndex = std::max(0, (topIndex / CATALOG_GENRE_PAGE_SIZE) * CATALOG_GENRE_PAGE_SIZE);
   const int visible = std::min(CATALOG_GENRE_PAGE_SIZE, static_cast<int>(entries.size()) - topIndex);
@@ -1381,7 +1401,7 @@ void BookOrbitCatalogBrowserActivity::buildGenreGrid(UiApp::ScreenType& screen) 
     const int y = area.y + (slot / CATALOG_GENRE_COLUMNS) * (cellHeight + CATALOG_GENRE_GAP);
     renderer.fillRect(x, y, cellWidth, cellHeight, Color::White);
     for (size_t coverIndex = 0; coverIndex < 4; ++coverIndex) {
-      const int cx = x + 3 + static_cast<int>(coverIndex % 2) * (thumbWidth + 4);
+      const int cx = x + (cellWidth - mosaicWidth) / 2 + static_cast<int>(coverIndex % 2) * (thumbWidth + 4);
       const int cy = y + 3 + static_cast<int>(coverIndex / 2) * (thumbHeight + 4);
       bool drawn = false;
       if (coverIndex < entry.previewBooks.size()) {
