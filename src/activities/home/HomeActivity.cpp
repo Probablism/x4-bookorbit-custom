@@ -59,6 +59,7 @@ enum class HomeMenuAction {
   Library,
   OpdsBrowser,
   BookOrbitCatalog,
+  Chess,
   ReadingStats,
   Bookmarks,
   FileTransfer,
@@ -254,6 +255,7 @@ void appendHomeMenuItems(HomeMenuEntries& items, bool hasOpdsServers, bool hasRe
   if (BOOKORBIT_STORE.hasCredentials()) {
     items.push({tr(STR_BOOKORBIT), Library, HomeMenuAction::BookOrbitCatalog});
   }
+  items.push({"Chess", Book, HomeMenuAction::Chess});
   if (hasReadingStats) {
     items.push({tr(STR_READING_STATS), Chart, HomeMenuAction::ReadingStats});
   }
@@ -285,6 +287,7 @@ HomeMenuEntries buildMinimalMenuItems(bool hasOpdsServers, bool hasReadingStats,
   if (BOOKORBIT_STORE.hasCredentials()) {
     items.push({tr(STR_BOOKORBIT), Library, HomeMenuAction::BookOrbitCatalog});
   }
+  items.push({"Chess", Book, HomeMenuAction::Chess});
   if (hasBookmarks || hasClippings) {
     items.push({savedItemsLabel(hasBookmarks, hasClippings), BookmarkIcon, HomeMenuAction::Bookmarks});
   }
@@ -1512,6 +1515,9 @@ void HomeActivity::loop() {
           case HomeMenuAction::BookOrbitCatalog:
             activityManager.goToBookOrbitCatalog();
             break;
+          case HomeMenuAction::Chess:
+            onChessOpen();
+            break;
           case HomeMenuAction::ReadingStats:
             onReadingStatsOpen();
             break;
@@ -1759,6 +1765,9 @@ void HomeActivity::loop() {
         break;
       case HomeMenuAction::BookOrbitCatalog:
         activityManager.goToBookOrbitCatalog();
+        break;
+      case HomeMenuAction::Chess:
+        onChessOpen();
         break;
       case HomeMenuAction::ReadingStats:
         onReadingStatsOpen();
@@ -2411,6 +2420,8 @@ void HomeActivity::onSettingsOpen() { activityManager.goToSettings(); }
 void HomeActivity::onFileTransferOpen() { activityManager.goToFileTransfer(); }
 
 void HomeActivity::onOpdsBrowserOpen() { activityManager.goToBrowser(); }
+
+void HomeActivity::onChessOpen() { activityManager.goToChess(); }
 
 void HomeActivity::onReadingStatsOpen() {
   if (!SETTINGS.shouldTrackReadingStats()) return;

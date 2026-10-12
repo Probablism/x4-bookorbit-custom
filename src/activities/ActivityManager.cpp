@@ -25,6 +25,7 @@
 #include "boot_sleep/SleepActivity.h"
 #include "browser/BookOrbitCatalogBrowserActivity.h"
 #include "browser/OpdsBookBrowserActivity.h"
+#include "chess/ChessActivity.h"
 #include "components/TouchRegistry.h"
 #include "home/AlertActivity.h"
 #include "home/CrashActivity.h"
@@ -972,6 +973,8 @@ void ActivityManager::goToBrowser() {
     replaceActivity(std::make_unique<OpdsServerListActivity>(renderer, mappedInput, true));
   }
 }
+
+void ActivityManager::goToChess() { replaceActivity(std::make_unique<ChessActivity>(renderer, mappedInput)); }
 
 void ActivityManager::goToBookOrbitCatalog() {
   // Replace (not push): clearing the activity stack under the browser frees the
