@@ -12,6 +12,7 @@
 #include "UITheme.h"
 #include "components/icons/bookOrbitIcons.h"
 #include "components/icons/listIcons.h"
+#include "components/icons/readingStatsIcons.h"
 
 namespace fui = freeink::ui;
 namespace {
@@ -27,6 +28,30 @@ CoverGridHomeUi::CoverGridHomeUi(GfxRenderer& renderer)
 namespace {
 bool showsTab(const CoverGridHomeUi::Tab tab, const bool hasOpds, const bool hasBookOrbit) {
   return (tab != CoverGridHomeUi::Tab::Opds || hasOpds) && (tab != CoverGridHomeUi::Tab::BookOrbit || hasBookOrbit);
+}
+
+const char* launcherLabel(const CoverGridHomeUi::Tab tab) {
+  switch (tab) {
+    case CoverGridHomeUi::Tab::Files:
+      return tr(STR_BROWSE_FILES);
+    case CoverGridHomeUi::Tab::Library:
+      return tr(STR_LIBRARY);
+    case CoverGridHomeUi::Tab::Opds:
+      return tr(STR_OPDS_BROWSER);
+    case CoverGridHomeUi::Tab::BookOrbit:
+      return tr(STR_BOOKORBIT);
+    case CoverGridHomeUi::Tab::Chess:
+      return "Chess";
+    case CoverGridHomeUi::Tab::ReadingStats:
+      return tr(STR_READING_STATS);
+    case CoverGridHomeUi::Tab::Transfer:
+      return tr(STR_FILE_TRANSFER);
+    case CoverGridHomeUi::Tab::Settings:
+      return tr(STR_SETTINGS_TITLE);
+    case CoverGridHomeUi::Tab::Count:
+      return "";
+  }
+  return "";
 }
 }  // namespace
 
@@ -221,10 +246,7 @@ void CoverGridHomeUi::drawLauncher(UiScreen& screen) {
   // Indexed by Tab.
   static constexpr const freeink::Icon* ICONS[MAX_TABS] = {
       &icon_folder_32, &icon_landmark_32, &icon_lyra_library_32, &icon_bookorbit_32,
-      &icon_lyra_transfer_32, &icon_lyra_settings_32};
-  static constexpr StrId LABELS[MAX_TABS] = {
-      StrId::STR_BROWSE_FILES, StrId::STR_LIBRARY, StrId::STR_OPDS_BROWSER, StrId::STR_BOOKORBIT,
-      StrId::STR_FILE_TRANSFER, StrId::STR_SETTINGS_TITLE};
+      &icon_book_marked_32, &icon_reading_stats_32, &icon_lyra_transfer_32, &icon_lyra_settings_32};
   const int count = tabCount(hasOpds, hasBookOrbit);
   if (count <= 0) return;
   const fui::Rect area = screen.body();
@@ -247,7 +269,7 @@ void CoverGridHomeUi::drawLauncher(UiScreen& screen) {
     constexpr int iconSize = 32;
     drawLucideIcon(renderer, *ICONS[static_cast<int>(shown)], x + (tileSide - iconSize) / 2,
                    y + (tileSide - iconSize) / 2);
-    const char* label = I18n::getInstance().get(LABELS[static_cast<int>(shown)]);
+    const char* label = launcherLabel(shown);
     const std::string clipped = renderer.truncatedText(UI_10_FONT_ID, label, cellWidth - 4);
     renderer.drawText(UI_10_FONT_ID, cellX + (cellWidth - renderer.getTextWidth(UI_10_FONT_ID, clipped.c_str())) / 2,
                       y + tileSide + 3, clipped.c_str());

@@ -2080,6 +2080,12 @@ void HomeActivity::activateCoverGridSelection() {
     case CoverGridHomeUi::Tab::BookOrbit:
       activityManager.goToBookOrbitCatalog();
       break;
+    case CoverGridHomeUi::Tab::Chess:
+      onChessOpen();
+      break;
+    case CoverGridHomeUi::Tab::ReadingStats:
+      onReadingStatsOpen();
+      break;
     case CoverGridHomeUi::Tab::Transfer:
       onFileTransferOpen();
       break;

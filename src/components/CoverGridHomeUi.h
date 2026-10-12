@@ -28,6 +28,8 @@ class CoverGridHomeUi final : public UiAppHost<16, 1> {
     Library,
     Opds,
     BookOrbit,
+    Chess,
+    ReadingStats,
     Transfer,
     Settings,
     Count
