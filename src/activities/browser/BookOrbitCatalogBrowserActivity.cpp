@@ -322,15 +322,6 @@ bool BookOrbitCatalogBrowserActivity::loadRoot(const bool allowNetwork) {
   search.type = EntryType::SEARCH;
   search.title = tr(STR_SEARCH);
   entries.push_back(std::move(search));
-  Entry stats;
-  stats.type = EntryType::STATS;
-  stats.title = tr(STR_READING_STATS);
-  entries.push_back(std::move(stats));
-  Entry chess;
-  chess.type = EntryType::CHESS;
-  chess.title = "Chess";
-  chess.sectionId = "chess";
-  entries.push_back(std::move(chess));
 
   selectorIndex = 0;
   state = entries.empty() ? BrowserState::ERROR : BrowserState::BROWSING;
@@ -933,18 +924,6 @@ void BookOrbitCatalogBrowserActivity::activateSelected() {
     case EntryType::SEARCH:
       launchSearch();
       break;
-    case EntryType::STATS: {
-      const GlobalReadingStats globalStats = GlobalReadingStats::load();
-      startActivityForResult(
-          std::make_unique<BookStatsActivity>(renderer, mappedInput, tr(STR_READING_STATS), "", BookReadingStats{}, -1.0f,
-                                              false, 0, globalStats),
-          [this](const ActivityResult&) { requestUpdate(); });
-      break;
-    }
-    case EntryType::CHESS:
-      startActivityForResult(std::make_unique<ChessActivity>(renderer, mappedInput),
-                             [this](const ActivityResult&) { requestUpdate(); });
-      break;
     case EntryType::BOOK:
       if (entry.onDevice) {
         openLocalBook(entry.path);
@@ -1400,7 +1379,9 @@ void BookOrbitCatalogBrowserActivity::buildGenreGrid(UiApp::ScreenType& screen) 
     const auto& entry = entries[static_cast<size_t>(index)];
     const int x = area.x + (slot % CATALOG_GENRE_COLUMNS) * (cellWidth + CATALOG_GENRE_GAP);
     const int y = area.y + (slot / CATALOG_GENRE_COLUMNS) * (cellHeight + CATALOG_GENRE_GAP);
-    renderer.fillRect(x, y, cellWidth, cellHeight, Color::White);
+    // fillRect takes a boolean pixel state; passing Color::White converted to
+    // true and therefore painted the card black. Leaving the cleared screen
+    // as the card background is both correct and theme-safe.
     renderer.drawRect(x, y, cellWidth, cellHeight, true);
     // Genre covers vary wildly and many reduce to black at the X4's 1-bit
     // resolution. These intentionally text-first cards keep every category

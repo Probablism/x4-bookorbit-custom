@@ -10,8 +10,12 @@
 #include "fontIds.h"
 
 namespace {
-constexpr int kBoardSize = 400;
-constexpr int kSquare = kBoardSize / 8;
+constexpr int kBoardMaxSize = 400;
+
+int boardSizeFor(const GfxRenderer& renderer) {
+  const int available = std::min(renderer.getScreenWidth() - 64, renderer.getScreenHeight() - 130);
+  return std::max(8, std::min(kBoardMaxSize, available) / 8 * 8);
+}
 
 char pieceLetter(uint8_t piece) {
   static constexpr char letters[] = {' ', 'P', 'N', 'B', 'R', 'Q', 'K'};
@@ -42,11 +46,13 @@ void ChessActivity::newGame() {
 void ChessActivity::refreshLegalMoves() { chess::generateLegalMoves(position, legalMoves); }
 
 int ChessActivity::squareAt(const int x, const int y) const {
-  const int left = (renderer.getScreenWidth() - kBoardSize) / 2;
-  const int top = 46;
-  if (x < left || x >= left + kBoardSize || y < top || y >= top + kBoardSize) return -1;
-  const int file = (x - left) / kSquare;
-  const int rank = 7 - (y - top) / kSquare;
+  const int boardSize = boardSizeFor(renderer);
+  const int squareSize = boardSize / 8;
+  const int left = (renderer.getScreenWidth() - boardSize) / 2;
+  const int top = 54 + std::max(0, (renderer.getScreenHeight() - 54 - 52 - boardSize) / 2);
+  if (x < left || x >= left + boardSize || y < top || y >= top + boardSize) return -1;
+  const int file = (x - left) / squareSize;
+  const int rank = 7 - (y - top) / squareSize;
   return rank * 8 + file;
 }
 
@@ -118,23 +124,26 @@ void ChessActivity::render(RenderLock&&) {
     TouchHeaderBackButton::drawCompact(renderer, "CHESS");
   else
     CompactHeader::drawTitle(renderer, "CHESS");
-  const int left = (renderer.getScreenWidth() - kBoardSize) / 2;
-  const int top = 46;
+  const int boardSize = boardSizeFor(renderer);
+  const int squareSize = boardSize / 8;
+  const int left = (renderer.getScreenWidth() - boardSize) / 2;
+  const int top = 54 + std::max(0, (renderer.getScreenHeight() - 54 - 52 - boardSize) / 2);
   for (int displayRank = 0; displayRank < 8; ++displayRank) {
     for (int file = 0; file < 8; ++file) {
       const int square = (7 - displayRank) * 8 + file;
-      const int x = left + file * kSquare, y = top + displayRank * kSquare;
+      const int x = left + file * squareSize, y = top + displayRank * squareSize;
       const bool dark = ((file + displayRank) & 1) != 0;
-      renderer.fillRect(x, y, kSquare, kSquare, dark ? Color::Black : Color::White);
-      if (square == selectedSquare) renderer.drawRect(x + 2, y + 2, kSquare - 4, kSquare - 4, !dark);
+      if (dark) renderer.fillRectDither(x, y, squareSize, squareSize, Color::LightGray);
+      if (square == selectedSquare) renderer.drawRect(x + 2, y + 2, squareSize - 4, squareSize - 4, true);
       const char glyph[] = {pieceLetter(position.squares[square]), '\0'};
       if (glyph[0] != ' ') {
-        const int textX = x + (kSquare - renderer.getTextWidth(UI_12_FONT_ID, glyph)) / 2;
-        renderer.drawText(UI_12_FONT_ID, textX, y + 16, glyph, !dark);
+        const int textX = x + (squareSize - renderer.getTextWidth(UI_12_FONT_ID, glyph)) / 2;
+        renderer.drawText(UI_12_FONT_ID, textX, y + (squareSize - renderer.getLineHeight(UI_12_FONT_ID)) / 2, glyph);
       }
     }
   }
-  renderer.drawCenteredText(UI_10_FONT_ID, top + kBoardSize + 14, status());
-  renderer.drawCenteredText(UI_10_FONT_ID, top + kBoardSize + 30, "Tap piece, then destination");
+  renderer.drawRect(left, top, boardSize, boardSize, true);
+  renderer.drawCenteredText(UI_10_FONT_ID, top + boardSize + 14, status());
+  renderer.drawCenteredText(UI_10_FONT_ID, top + boardSize + 30, "Tap piece, then destination");
   renderer.displayBuffer();
 }
