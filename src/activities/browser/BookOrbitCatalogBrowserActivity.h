@@ -24,7 +24,7 @@
 class BookOrbitCatalogBrowserActivity final : public Activity {
  public:
   enum class BrowserState { CHECK_WIFI, WIFI_SELECTION, LOADING, BROWSING, DOWNLOADING, ERROR, SEARCH_INPUT };
-  enum class EntryType { SECTION, FACET_SECTION, FACET, LOCAL_SECTION, LOCAL_BOOK, SEARCH, STATS, BOOK };
+  enum class EntryType { SECTION, FACET_SECTION, FACET, LOCAL_SECTION, LOCAL_BOOK, SEARCH, STATS, CHESS, BOOK };
   // Which listing the BROWSING state currently shows; drives Back navigation.
   enum class NavLevel { Root, FacetList, Books };
 

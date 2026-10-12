@@ -27,6 +27,7 @@
 #include "activities/ActivityManager.h"
 #include "activities/home/BookActions.h"
 #include "activities/home/FileBrowserActionActivity.h"
+#include "activities/chess/ChessActivity.h"
 #include "activities/network/WifiSelectionActivity.h"
 #include "activities/reader/BookReadingStats.h"
 #include "activities/reader/BookStatsActivity.h"
@@ -325,6 +326,11 @@ bool BookOrbitCatalogBrowserActivity::loadRoot(const bool allowNetwork) {
   stats.type = EntryType::STATS;
   stats.title = tr(STR_READING_STATS);
   entries.push_back(std::move(stats));
+  Entry chess;
+  chess.type = EntryType::CHESS;
+  chess.title = "Chess";
+  chess.sectionId = "chess";
+  entries.push_back(std::move(chess));
 
   selectorIndex = 0;
   state = entries.empty() ? BrowserState::ERROR : BrowserState::BROWSING;
@@ -935,6 +941,10 @@ void BookOrbitCatalogBrowserActivity::activateSelected() {
           [this](const ActivityResult&) { requestUpdate(); });
       break;
     }
+    case EntryType::CHESS:
+      startActivityForResult(std::make_unique<ChessActivity>(renderer, mappedInput),
+                             [this](const ActivityResult&) { requestUpdate(); });
+      break;
     case EntryType::BOOK:
       if (entry.onDevice) {
         openLocalBook(entry.path);
@@ -1382,15 +1392,6 @@ void BookOrbitCatalogBrowserActivity::buildGenreGrid(UiApp::ScreenType& screen) 
   const fui::Rect area = screen.body();
   const int cellWidth = std::max(1, (area.width - (CATALOG_GENRE_COLUMNS - 1) * CATALOG_GENRE_GAP) / CATALOG_GENRE_COLUMNS);
   const int cellHeight = std::max(1, (area.height - (CATALOG_GENRE_ROWS - 1) * CATALOG_GENRE_GAP) / CATALOG_GENRE_ROWS);
-  const int mosaicHeight = std::max(1, cellHeight - CATALOG_GENRE_LABEL_HEIGHT - 8);
-  const int thumbHeight = std::max(1, (mosaicHeight - 8) / 2);
-  // Covers are portrait assets. Preserve that aspect ratio and center the 2x2
-  // mosaic, so a missing image is a small outlined placeholder rather than a
-  // large, visually heavy black block.
-  const int thumbWidth = std::max(1, std::min((cellWidth - 10) / 2,
-                                              thumbHeight * BookOrbitCoverCache::THUMB_WIDTH /
-                                                  BookOrbitCoverCache::THUMB_HEIGHT));
-  const int mosaicWidth = thumbWidth * 2 + 4;
   visibleRows = CATALOG_GENRE_PAGE_SIZE;
   topIndex = std::max(0, (topIndex / CATALOG_GENRE_PAGE_SIZE) * CATALOG_GENRE_PAGE_SIZE);
   const int visible = std::min(CATALOG_GENRE_PAGE_SIZE, static_cast<int>(entries.size()) - topIndex);
@@ -1400,24 +1401,18 @@ void BookOrbitCatalogBrowserActivity::buildGenreGrid(UiApp::ScreenType& screen) 
     const int x = area.x + (slot % CATALOG_GENRE_COLUMNS) * (cellWidth + CATALOG_GENRE_GAP);
     const int y = area.y + (slot / CATALOG_GENRE_COLUMNS) * (cellHeight + CATALOG_GENRE_GAP);
     renderer.fillRect(x, y, cellWidth, cellHeight, Color::White);
-    for (size_t coverIndex = 0; coverIndex < 4; ++coverIndex) {
-      const int cx = x + (cellWidth - mosaicWidth) / 2 + static_cast<int>(coverIndex % 2) * (thumbWidth + 4);
-      const int cy = y + 3 + static_cast<int>(coverIndex / 2) * (thumbHeight + 4);
-      bool drawn = false;
-      if (coverIndex < entry.previewBooks.size()) {
-        const auto& preview = entry.previewBooks[coverIndex];
-        const std::string path = BookOrbitCoverCache::pathFor(preview.id, preview.coverUpdatedAt);
-        FsFile cover;
-        if (Storage.openFileForRead("BookOrbit", path, cover)) {
-          Bitmap bitmap(cover);
-          if (bitmap.parseHeaders() == BmpReaderError::Ok) drawn = renderer.drawBitmap(bitmap, cx, cy, thumbWidth, thumbHeight);
-          cover.close();
-        }
-      }
-      if (!drawn) renderer.drawRect(cx, cy, thumbWidth, thumbHeight, true);
+    renderer.drawRect(x, y, cellWidth, cellHeight, true);
+    // Genre covers vary wildly and many reduce to black at the X4's 1-bit
+    // resolution. These intentionally text-first cards keep every category
+    // immediately identifiable; book covers remain on the book grid.
+    const auto lines = renderer.wrappedText(UI_12_FONT_ID, entry.title.c_str(), cellWidth - 24, 3);
+    const int lineHeight = renderer.getLineHeight(UI_12_FONT_ID);
+    int labelY = y + (cellHeight - static_cast<int>(lines.size()) * lineHeight) / 2;
+    for (const auto& line : lines) {
+      const int labelX = x + (cellWidth - renderer.getTextWidth(UI_12_FONT_ID, line.c_str())) / 2;
+      renderer.drawText(UI_12_FONT_ID, labelX, labelY, line.c_str());
+      labelY += lineHeight;
     }
-    const std::string label = renderer.truncatedText(UI_10_FONT_ID, entry.title.c_str(), cellWidth - 10);
-    renderer.drawText(UI_10_FONT_ID, x + 5, y + mosaicHeight + 8, label.c_str());
     if (index == selectorIndex) renderer.drawRect(x - 2, y - 2, cellWidth + 4, cellHeight + 4, true);
     screen.frame().hit(fui::Rect{static_cast<int16_t>(x), static_cast<int16_t>(y), static_cast<int16_t>(cellWidth),
                                  static_cast<int16_t>(cellHeight)},

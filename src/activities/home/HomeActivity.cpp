@@ -256,9 +256,7 @@ void appendHomeMenuItems(HomeMenuEntries& items, bool hasOpdsServers, bool hasRe
     items.push({tr(STR_BOOKORBIT), Library, HomeMenuAction::BookOrbitCatalog});
   }
   items.push({"Chess", Book, HomeMenuAction::Chess});
-  if (hasReadingStats) {
-    items.push({tr(STR_READING_STATS), Chart, HomeMenuAction::ReadingStats});
-  }
+  items.push({tr(STR_READING_STATS), Chart, HomeMenuAction::ReadingStats});
   if (hasBookmarks || hasClippings) {
     items.push({savedItemsLabel(hasBookmarks, hasClippings), BookmarkIcon, HomeMenuAction::Bookmarks});
   }
@@ -291,9 +289,7 @@ HomeMenuEntries buildMinimalMenuItems(bool hasOpdsServers, bool hasReadingStats,
   if (hasBookmarks || hasClippings) {
     items.push({savedItemsLabel(hasBookmarks, hasClippings), BookmarkIcon, HomeMenuAction::Bookmarks});
   }
-  if (hasReadingStats) {
-    items.push({tr(STR_READING_STATS), Chart, HomeMenuAction::ReadingStats});
-  }
+  items.push({tr(STR_READING_STATS), Chart, HomeMenuAction::ReadingStats});
 
   items.push({tr(STR_FILE_TRANSFER), Transfer, HomeMenuAction::FileTransfer});
   return items;
@@ -2424,7 +2420,6 @@ void HomeActivity::onOpdsBrowserOpen() { activityManager.goToBrowser(); }
 void HomeActivity::onChessOpen() { activityManager.goToChess(); }
 
 void HomeActivity::onReadingStatsOpen() {
-  if (!SETTINGS.shouldTrackReadingStats()) return;
   const int highlightedBookIdx = getHighlightedBookIndex();
   std::string bookTitle =
       highlightedBookIdx >= 0 ? recentBooks[highlightedBookIdx].title : std::string(tr(STR_READING_STATS));
